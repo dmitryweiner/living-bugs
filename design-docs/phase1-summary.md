@@ -107,16 +107,16 @@ ensuring deterministic simulation (given the same PRNG seed and config).
 ```bash
 # Prerequisites
 fnm use 22           # Node.js 22 (or any >= 18)
-npm install          # Install all workspace dependencies
+yarn install         # Install all workspace dependencies
 
 # Development
-npm run dev:web      # Web app at http://localhost:3000
-npm run build:web    # Build web app to /docs for GitHub Pages
+yarn dev:web         # Web app at http://localhost:3000
+yarn build:web       # Build web app to /docs for GitHub Pages
 
 # Tests
-npm test             # Run all unit tests (vitest)
-npm run test:watch   # Run tests in watch mode
-npm run test:coverage # Run with coverage report
+yarn test            # Run all unit tests (vitest)
+yarn test:watch      # Run tests in watch mode
+yarn test:coverage   # Run with coverage report
 
 # Headless simulation
 npx tsx apps/headless/src/main.ts                          # Default: 3000 ticks

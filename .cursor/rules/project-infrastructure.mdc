@@ -1,0 +1,61 @@
+---
+description: Living Bugs project infrastructure, commands, monorepo layout, and testing conventions
+alwaysApply: true
+---
+
+# Project Infrastructure
+
+## Monorepo Layout (Yarn Workspaces)
+
+```
+living-bugs/
+  packages/sim-core/    # @living-bugs/sim-core — pure TS simulation engine (no DOM)
+  apps/web/             # @living-bugs/web — Pixi.js v7 browser app (Vite)
+  apps/headless/        # @living-bugs/headless — Node.js CLI runner
+  configs/              # world-config.json (runtime config)
+  design-docs/          # Design documents (world config, DNA format, brain format)
+  docs/                 # Built web app output (GitHub Pages deploy target)
+```
+
+## Tech Stack
+
+- **Node.js** 22 (.nvmrc), **TypeScript** 5.x (strict), **Yarn** Classic 1.x
+- **sim-core**: pure TypeScript + Matter.js (physics). No browser APIs.
+- **web**: Vite 5 + Pixi.js v7 + pixi-viewport + idb-keyval
+- **headless**: tsx for dev, tsc for build
+- **Tests**: Vitest 4 (config at root `vitest.config.ts`)
+- Root `tsconfig.json` is solution-style (references only, no compilerOptions)
+
+## Commands
+
+```bash
+yarn install                # Install all dependencies
+yarn build:core             # Build sim-core only
+yarn build:web              # Build web app → /docs (GitHub Pages)
+yarn dev:web                # Dev server at http://localhost:3000
+yarn start:headless         # Run headless CLI (built)
+yarn test                   # Run all unit tests
+yarn test:watch             # Tests in watch mode
+yarn test:coverage          # Tests with coverage
+yarn typecheck              # Type-check entire monorepo
+npx tsx apps/headless/src/main.ts  # Run headless directly (dev)
+```
+
+## Testing Requirements
+
+- **Every new module MUST have a `*.test.ts` file** next to it
+- Tests live alongside source: `src/foo.ts` → `src/foo.test.ts`
+- Test pattern: `packages/*/src/**/*.test.ts` and `apps/*/src/**/*.test.ts`
+- **Run `yarn test` before considering any task complete**
+- If you change production code, update or add tests for the changed behavior
+- Use a minimal `testConfig()` helper (small world, few creatures) for World tests
+- Call `resetInnovationCounter()` in `beforeEach` when testing DNA/brain creation
+- Prefer extracting pure functions for testability over testing private methods
+
+## Key Conventions
+
+- Package imports use `@living-bugs/sim-core` — resolved via Vite alias (not built dist)
+- All packages use `"type": "module"` — use `.js` extensions in relative imports
+- World simulation is deterministic: same PRNG seed + config → same result
+- `configs/world-config.json` is the single source of runtime parameters
+- Web build goes to `/docs` (not `dist`) for GitHub Pages; `design-docs/` holds documentation
