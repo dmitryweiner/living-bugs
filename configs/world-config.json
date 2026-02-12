@@ -12,9 +12,9 @@
     "seed": 42
   },
   "energy": {
-    "initialEnergy": 100,
+    "initialEnergy": 120,
     "maxEnergy": 500,
-    "baseMetabolism": 0.12,
+    "baseMetabolism": 0.08,
     "moveCost": 0.02,
     "turnCost": 0.01,
     "attackCost": 2.0,
@@ -22,9 +22,9 @@
     "broadcastCost": 0.03
   },
   "food": {
-    "spawnRate": 5,
+    "spawnRate": 15,
     "nutritionValue": 30,
-    "maxCount": 400,
+    "maxCount": 2000,
     "radius": 4
   },
   "combat": {
@@ -33,11 +33,11 @@
     "attackCooldown": 5
   },
   "reproduction": {
-    "energyThreshold": 200,
+    "energyThreshold": 180,
     "offspringEnergyShare": 0.4,
     "mutationRate": 0.1,
     "mutationStrength": 0.2,
-    "cooldown": 60
+    "cooldown": 40
   },
   "death": {
     "foodDropRatio": 0.5,

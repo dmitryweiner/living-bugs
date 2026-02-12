@@ -1,7 +1,7 @@
 import { World, createDefaultDNA, PRNG } from '@living-bugs/sim-core';
 import type { WorldConfig, CreatureState, TickMetrics } from '@living-bugs/sim-core';
 import { Renderer } from './renderer.js';
-import { saveSnapshot, loadSnapshot } from './storage.js';
+import { saveSnapshot, loadSnapshot, clearSnapshot } from './storage.js';
 
 // ============================================================
 // Load config (bundled by vite)
@@ -145,6 +145,17 @@ function setupControls(): void {
     } else {
       alert('No saved world found.');
     }
+  });
+
+  const toolReset = document.getElementById('tool-reset')!;
+  toolReset.addEventListener('click', async () => {
+    if (!confirm('Reset the world? All creatures and progress will be lost.')) return;
+    localStorage.removeItem('living-bugs-emergency-save');
+    await clearSnapshot();
+    (window as any).__resetWorld();
+    selectedCreatureId = null;
+    renderer.setSelectedCreature(null);
+    updateInspector(null);
   });
 
   toolImport.addEventListener('click', () => {
@@ -294,26 +305,51 @@ async function init(): Promise<void> {
   // Create world
   world = new World(config);
 
-  // Try to load saved state
-  const saved = await loadSnapshot();
-  if (saved) {
-    world.loadSnapshot(saved);
-    console.log(`Restored world from tick ${saved.tick}`);
-  } else {
-    // Check localStorage emergency save
-    const emergency = localStorage.getItem('living-bugs-emergency-save');
-    if (emergency) {
-      try {
-        const snapshot = JSON.parse(emergency);
-        world.loadSnapshot(snapshot);
-        localStorage.removeItem('living-bugs-emergency-save');
-        console.log('Restored from emergency save');
-      } catch {
+  // Expose for debugging: window.__world, window.__resetWorld()
+  (window as any).__world = world;
+  (window as any).__resetWorld = () => {
+    localStorage.removeItem('living-bugs-emergency-save');
+    world.creatures.clear();
+    world.food.clear();
+    world.tick = 0;
+    world.nextEntityId = 1;
+    world.initialize();
+    console.log('World reset to fresh state');
+  };
+
+  // ?reset in URL forces a fresh start (clears all saves)
+  const forceReset = new URLSearchParams(window.location.search).has('reset');
+  if (forceReset) {
+    localStorage.removeItem('living-bugs-emergency-save');
+    await clearSnapshot();
+    console.log('Force reset: cleared all saves');
+  }
+
+  // Try to load saved state (unless force reset)
+  if (!forceReset) {
+    const saved = await loadSnapshot();
+    if (saved) {
+      world.loadSnapshot(saved);
+      console.log(`Restored world from tick ${saved.tick}`);
+    } else {
+      const emergency = localStorage.getItem('living-bugs-emergency-save');
+      if (emergency) {
+        try {
+          const snapshot = JSON.parse(emergency);
+          world.loadSnapshot(snapshot);
+          localStorage.removeItem('living-bugs-emergency-save');
+          console.log('Restored from emergency save');
+        } catch {
+          world.initialize();
+        }
+      } else {
         world.initialize();
       }
-    } else {
-      world.initialize();
     }
+  } else {
+    world.initialize();
+    // Remove ?reset from URL without reloading
+    window.history.replaceState({}, '', window.location.pathname);
   }
 
   // Create renderer
