@@ -22,9 +22,9 @@
     "broadcastCost": 0.03
   },
   "food": {
-    "spawnRate": 15,
+    "spawnRate": 10,
     "nutritionValue": 30,
-    "maxCount": 2000,
+    "maxCount": 1200,
     "radius": 4
   },
   "combat": {
