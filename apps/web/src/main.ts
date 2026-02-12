@@ -291,16 +291,10 @@ function setupAutosave(): void {
 // ============================================================
 
 async function init(): Promise<void> {
-  // Try to load config from public dir (for vite) or fetch
-  let config: WorldConfig;
-  try {
-    const resp = await fetch('/configs/world-config.json');
-    config = await resp.json();
-  } catch {
-    // Fallback: import directly
-    const module = await import('../../../configs/world-config.json');
-    config = module.default as WorldConfig;
-  }
+  // Load config — use static import so Vite bundles it correctly
+  // (works both on dev server and any deploy path like GitHub Pages)
+  const configModule = await import('../../../configs/world-config.json');
+  const config: WorldConfig = configModule.default as WorldConfig;
 
   // Create world
   world = new World(config);
