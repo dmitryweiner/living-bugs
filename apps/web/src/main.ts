@@ -2,6 +2,10 @@ import { World, createDefaultDNA, PRNG } from '@living-bugs/sim-core';
 import type { WorldConfig, CreatureState, TickMetrics, DNA } from '@living-bugs/sim-core';
 import { Renderer } from './renderer.js';
 import { saveSnapshot, loadSnapshot, clearSnapshot } from './storage.js';
+import { ConfigEditor } from './config-editor.js';
+import { Analytics } from './analytics.js';
+import { Minimap } from './minimap.js';
+import { GenotypeBrowser } from './genotype-browser.js';
 
 // ============================================================
 // Load config (bundled by vite)
@@ -18,11 +22,16 @@ async function loadConfig(): Promise<WorldConfig> {
 
 let world: World;
 let renderer: Renderer;
+let configEditor: ConfigEditor;
+let analytics: Analytics;
+let minimap: Minimap;
+let genotypeBrowser: GenotypeBrowser;
 let isPaused = false;
 let speedMultiplier = 1;
 let selectedCreatureId: number | null = null;
 let activeTool: 'none' | 'food' | 'creature' = 'none';
 let lastMetrics: TickMetrics | null = null;
+let seedGenotypesGlobal: DNA[] = [];
 
 // ============================================================
 // HUD update
@@ -52,7 +61,7 @@ function updateInspector(creature: CreatureState | null): void {
   panel.classList.add('open');
 
   const sensors = creature.dna.sensors.map(s => {
-    if (s.type === 'rayVision') return `RayVision(${s.rayCount} rays, fov=${s.fov.toFixed(2)})`;
+    if (s.type === 'rayVision') return `RayVision(${s.rayCount}r, fov=${s.fov.toFixed(1)})`;
     return s.type;
   }).join(', ');
 
@@ -61,27 +70,34 @@ function updateInspector(creature: CreatureState | null): void {
   const brainNodes = creature.dna.brain.nodeGenes.length;
   const brainConns = creature.dna.brain.connectionGenes.filter(c => c.enabled).length;
 
+  const energyPct = Math.min(100, (creature.energy / world.config.energy.maxEnergy) * 100);
+  const energyColor = energyPct > 60 ? '#4caf50' : energyPct > 30 ? '#ffb74d' : '#ef5350';
+
+  const actions = [
+    creature.isEating ? 'EAT' : '',
+    creature.isAttacking ? 'ATK' : '',
+    creature.isDonating ? 'DON' : '',
+    creature.isBroadcasting ? 'BRD' : '',
+  ].filter(Boolean).join(' ') || 'idle';
+
   content.innerHTML = `
-    <div class="field"><span class="label">ID: </span><span class="value">${creature.id}</span></div>
-    <div class="field"><span class="label">Group: </span><span class="value">${creature.dna.groupId}</span></div>
-    <div class="field"><span class="label">Age: </span><span class="value">${creature.age} ticks</span></div>
-    <div class="field"><span class="label">Energy: </span><span class="value">${creature.energy.toFixed(1)} / ${world.config.energy.maxEnergy}</span></div>
-    <div class="field"><span class="label">Radius: </span><span class="value">${creature.dna.body.radius.toFixed(1)}</span></div>
-    <div class="field"><span class="label">IFF: </span><span class="value">${creature.dna.hasIFF ? 'Yes' : 'No'}</span></div>
-    <div class="field"><span class="label">Speed: </span><span class="value">${creature.velocity.toFixed(2)}</span></div>
-    <hr style="border-color:#333; margin:8px 0;">
-    <div class="field"><span class="label">Sensors: </span><span class="value">${sensors}</span></div>
-    <div class="field"><span class="label">Actuators: </span><span class="value">${actuators}</span></div>
-    <hr style="border-color:#333; margin:8px 0;">
-    <div class="field"><span class="label">Brain nodes: </span><span class="value">${brainNodes}</span></div>
-    <div class="field"><span class="label">Brain conns: </span><span class="value">${brainConns}</span></div>
-    <div class="field"><span class="label">Plasticity: </span><span class="value">${creature.dna.brain.plasticityRate.toFixed(4)}</span></div>
-    <div class="field"><span class="label">Actions: </span><span class="value">${[
-      creature.isEating ? 'EAT' : '',
-      creature.isAttacking ? 'ATK' : '',
-      creature.isDonating ? 'DON' : '',
-      creature.isBroadcasting ? 'BRD' : '',
-    ].filter(Boolean).join(' ') || 'idle'}</span></div>
+    <div class="field" style="margin-bottom:8px;">
+      <div style="display:flex; justify-content:space-between; margin-bottom:3px;">
+        <span class="label">Energy</span>
+        <span class="value" style="font-size:11px;">${creature.energy.toFixed(1)} / ${world.config.energy.maxEnergy}</span>
+      </div>
+      <div style="background:#222; border-radius:3px; height:6px; overflow:hidden;">
+        <div style="background:${energyColor}; width:${energyPct.toFixed(1)}%; height:100%; border-radius:3px; transition:width 0.1s;"></div>
+      </div>
+    </div>
+    <div class="field"><span class="label">ID: </span><span class="value">#${creature.id}</span> <span class="label" style="margin-left:8px;">Group: </span><span class="value">${creature.dna.groupId}</span></div>
+    <div class="field"><span class="label">Age: </span><span class="value">${creature.age}</span> <span class="label" style="margin-left:8px;">Radius: </span><span class="value">${creature.dna.body.radius.toFixed(1)}</span></div>
+    <div class="field"><span class="label">Speed: </span><span class="value">${creature.velocity.toFixed(2)}</span> <span class="label" style="margin-left:8px;">IFF: </span><span class="value">${creature.dna.hasIFF ? 'Yes' : 'No'}</span></div>
+    <div class="field"><span class="label">Action: </span><span class="value" style="color:${actions === 'idle' ? '#666' : '#ffb74d'}">${actions}</span></div>
+    <hr style="border-color:#333; margin:6px 0;">
+    <div class="field"><span class="label">Brain: </span><span class="value">${brainNodes}n / ${brainConns}c</span> <span class="label" style="margin-left:8px;">Plasticity: </span><span class="value">${creature.dna.brain.plasticityRate.toFixed(3)}</span></div>
+    <div class="field"><span class="label">Sensors: </span><span class="value" style="font-size:10px;">${sensors}</span></div>
+    <div class="field"><span class="label">Actuators: </span><span class="value" style="font-size:10px;">${actuators}</span></div>
   `;
 }
 
@@ -91,8 +107,8 @@ function updateInspector(creature: CreatureState | null): void {
 
 function setupControls(): void {
   const btnPause = document.getElementById('btn-pause')!;
+  const btnSpeed01 = document.getElementById('btn-speed01')!;
   const btnSpeed1 = document.getElementById('btn-speed1')!;
-  const btnSpeed3 = document.getElementById('btn-speed3')!;
   const btnSpeed10 = document.getElementById('btn-speed10')!;
 
   btnPause.addEventListener('click', () => {
@@ -103,14 +119,29 @@ function setupControls(): void {
 
   function setSpeed(s: number): void {
     speedMultiplier = s;
+    btnSpeed01.classList.toggle('active', s === 0.1);
     btnSpeed1.classList.toggle('active', s === 1);
-    btnSpeed3.classList.toggle('active', s === 3);
     btnSpeed10.classList.toggle('active', s === 10);
   }
 
+  btnSpeed01.addEventListener('click', () => setSpeed(0.1));
   btnSpeed1.addEventListener('click', () => setSpeed(1));
-  btnSpeed3.addEventListener('click', () => setSpeed(3));
   btnSpeed10.addEventListener('click', () => setSpeed(10));
+
+  // Collapsible sandbox tools
+  const sandboxToggle = document.getElementById('sandbox-toggle')!;
+  const sandboxTools = document.getElementById('sandbox-tools')!;
+  sandboxToggle.addEventListener('click', () => {
+    sandboxTools.classList.toggle('collapsed');
+  });
+
+  // Inspector close button
+  const inspectorClose = document.getElementById('inspector-close')!;
+  inspectorClose.addEventListener('click', () => {
+    selectedCreatureId = null;
+    renderer.setSelectedCreature(null);
+    updateInspector(null);
+  });
 
   // Sandbox tools
   const toolNone = document.getElementById('tool-none')!;
@@ -145,6 +176,38 @@ function setupControls(): void {
     } else {
       alert('No saved world found.');
     }
+  });
+
+  // Config editor toggle
+  const toolConfig = document.getElementById('tool-config')!;
+  toolConfig.addEventListener('click', () => {
+    configEditor.toggle();
+    toolConfig.classList.toggle('active');
+  });
+
+  // Genotype browser toggle
+  const toolGenotypes = document.getElementById('tool-genotypes')!;
+  toolGenotypes.addEventListener('click', () => {
+    // Update with current data before showing
+    genotypeBrowser.update(seedGenotypesGlobal, world.getCreatureStates(), world.config);
+    genotypeBrowser.toggle();
+    toolGenotypes.classList.toggle('active');
+  });
+
+  // Analytics toggle
+  const toolAnalytics = document.getElementById('tool-analytics')!;
+  toolAnalytics.addEventListener('click', () => {
+    const panel = document.getElementById('analytics-panel')!;
+    panel.classList.toggle('open');
+    toolAnalytics.classList.toggle('active');
+  });
+
+  // Minimap toggle
+  const toolMinimap = document.getElementById('tool-minimap')!;
+  toolMinimap.addEventListener('click', () => {
+    const panel = document.getElementById('minimap-container')!;
+    panel.classList.toggle('open');
+    toolMinimap.classList.toggle('active');
   });
 
   const toolReset = document.getElementById('tool-reset')!;
@@ -229,15 +292,39 @@ function handleWorldClick(worldX: number, worldY: number): void {
 // Game loop
 // ============================================================
 
+let frameCount = 0;
+let slowAccumulator = 0;
+
 function gameLoop(): void {
   if (!isPaused) {
-    for (let i = 0; i < speedMultiplier; i++) {
-      lastMetrics = world.step();
+    if (speedMultiplier >= 1) {
+      for (let i = 0; i < speedMultiplier; i++) {
+        lastMetrics = world.step();
+        if (lastMetrics) analytics.record(lastMetrics);
+      }
+    } else {
+      // Fractional speed: accumulate and step when >= 1
+      slowAccumulator += speedMultiplier;
+      if (slowAccumulator >= 1) {
+        slowAccumulator -= 1;
+        lastMetrics = world.step();
+        if (lastMetrics) analytics.record(lastMetrics);
+      }
     }
   }
 
   if (lastMetrics) {
     updateHUD(lastMetrics);
+  }
+
+  // Redraw analytics and minimap every 10 frames
+  frameCount++;
+  if (frameCount % 10 === 0) {
+    analytics.draw();
+    const creatures = world.getCreatureStates();
+    const food = world.getFoodStates();
+    const obstacles = world.getObstacleStates();
+    minimap.draw(creatures, food, renderer.getViewportBounds(), obstacles);
   }
 
   // Update selected creature inspector
@@ -254,7 +341,7 @@ function gameLoop(): void {
   }
 
   // Render
-  renderer.render(world.getCreatureStates(), world.getFoodStates());
+  renderer.render(world.getCreatureStates(), world.getFoodStates(), world.getObstacleStates());
 
   requestAnimationFrame(gameLoop);
 }
@@ -303,6 +390,7 @@ async function init(): Promise<void> {
     const seedData = seedModule.default as { genotypes?: { dna: DNA }[] };
     if (seedData.genotypes && Array.isArray(seedData.genotypes)) {
       seedGenotypes = seedData.genotypes.map(g => g.dna);
+      seedGenotypesGlobal = seedGenotypes;
       console.log(`Loaded ${seedGenotypes.length} seed genotypes from headless training`);
     }
   } catch {
@@ -365,6 +453,32 @@ async function init(): Promise<void> {
   await renderer.init(container);
 
   renderer.onWorldClick = handleWorldClick;
+
+  // Create config editor
+  configEditor = new ConfigEditor(config);
+  configEditor.mount(container);
+
+  // Create analytics
+  analytics = new Analytics('analytics-canvas', 5);
+
+  // Create minimap
+  minimap = new Minimap('minimap-canvas', config);
+  minimap.onJump = (worldX, worldY) => {
+    renderer.centerOn(worldX, worldY);
+  };
+
+  // Create genotype browser
+  genotypeBrowser = new GenotypeBrowser();
+  genotypeBrowser.mount(container);
+  genotypeBrowser.onSpawn = (dna) => {
+    const rng = new PRNG(Date.now());
+    world.spawnCreature(
+      dna,
+      { x: rng.range(0, world.config.world.width), y: rng.range(0, world.config.world.height) },
+      rng.range(0, Math.PI * 2),
+      world.config.energy.initialEnergy,
+    );
+  };
 
   // Setup controls
   setupControls();

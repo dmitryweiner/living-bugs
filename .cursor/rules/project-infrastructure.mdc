@@ -73,6 +73,14 @@ yarn pipeline:short         # Short pipeline: train:short → build
 - Call `resetInnovationCounter()` in `beforeEach` when testing DNA/brain creation
 - Prefer extracting pure functions for testability over testing private methods
 
+## Build Dependencies (CRITICAL)
+
+- **`@living-bugs/sim-core` exports from `dist/`**, not `src/`. The headless runner (`apps/headless`) imports the **compiled** output.
+- **After ANY change to `packages/sim-core/src/`**, you MUST run `yarn build:core` before running headless simulations (`npx tsx apps/headless/...`). Otherwise the headless runner uses the OLD compiled code and changes won't take effect.
+- **Vite (web app)** resolves `@living-bugs/sim-core` via alias to `src/`, so `yarn dev:web` picks up source changes immediately without building.
+- **Tests (Vitest)** also use source directly — no build needed for `yarn test`.
+- Rule of thumb: **changed sim-core? → `yarn build:core` before headless, not needed for web dev or tests**.
+
 ## Key Conventions
 
 - Package imports use `@living-bugs/sim-core` — resolved via Vite alias (not built dist)

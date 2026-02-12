@@ -2,6 +2,15 @@
 // World Config types (matches configs/world-config.json)
 // ============================================================
 
+import type { ConfigValue } from './expr.js';
+
+/**
+ * WorldConfig — runtime parameters for the simulation.
+ *
+ * Selected fields accept `ConfigValue` (number | Expr) so that formulas
+ * can be expressed in JSON without code changes. Structural fields
+ * (world size, tick rate, etc.) remain plain numbers.
+ */
 export interface WorldConfig {
   world: {
     width: number;
@@ -18,26 +27,27 @@ export interface WorldConfig {
   energy: {
     initialEnergy: number;
     maxEnergy: number;
-    baseMetabolism: number;
-    moveCost: number;
-    turnCost: number;
-    attackCost: number;
-    visionCostPerRay: number;
-    broadcastCost: number;
+    baseMetabolism: ConfigValue;
+    densityMetabolismFactor: number;
+    moveCost: ConfigValue;
+    turnCost: ConfigValue;
+    attackCost: ConfigValue;
+    visionCostPerRay: ConfigValue;
+    broadcastCost: ConfigValue;
   };
   food: {
     spawnRate: number;
-    nutritionValue: number;
+    nutritionValue: ConfigValue;
     maxCount: number;
     radius: number;
   };
   combat: {
-    baseDamage: number;
+    baseDamage: ConfigValue;
     attackRadius: number;
     attackCooldown: number;
   };
   reproduction: {
-    energyThreshold: number;
+    energyThreshold: ConfigValue;
     offspringEnergyShare: number;
     mutationRate: number;
     mutationStrength: number;
@@ -49,12 +59,17 @@ export interface WorldConfig {
   };
   donation: {
     donateRadius: number;
-    donateAmount: number;
-    donateCost: number;
+    donateAmount: ConfigValue;
+    donateCost: ConfigValue;
   };
   broadcast: {
     broadcastRadius: number;
     signalChannels: number;
+  };
+  obstacles: {
+    count: number;
+    minRadius: number;
+    maxRadius: number;
   };
   creatureDefaults: {
     radius: number;
@@ -196,6 +211,12 @@ export interface FoodItemState {
   nutrition: number;
 }
 
+export interface ObstacleState {
+  id: number;
+  position: Vec2;
+  radius: number;
+}
+
 // ============================================================
 // World snapshot (for save/load)
 // ============================================================
@@ -204,6 +225,7 @@ export interface WorldSnapshot {
   tick: number;
   creatures: CreatureState[];
   food: FoodItemState[];
+  obstacles: ObstacleState[];
   config: WorldConfig;
   prngState: number[];
   nextEntityId: number;

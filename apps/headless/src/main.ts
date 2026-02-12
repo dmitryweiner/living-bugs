@@ -1,11 +1,12 @@
 import { World } from '@living-bugs/sim-core';
 import type { WorldConfig } from '@living-bugs/sim-core';
-import { readFileSync } from 'fs';
+import { readFileSync, writeFileSync } from 'fs';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import {
   parseArgs,
   runSimulation,
+  runGenerational,
   exportBestGenotypes,
   saveCheckpoint,
   loadCheckpoint,
@@ -46,20 +47,19 @@ Options:
   --checkpoint PATH      Save/load checkpoint from this file (enables resume)
   --checkpoint-interval N  Save checkpoint every N ticks (default: 10000)
   --seed PATH            Load seed genotypes from JSON file for initialization
+  --mode MODE            Training mode: continuous (default) or generational
+  --gen-ticks N          Ticks per generation in generational mode (default: 1000)
+  --generations N        Number of generations in generational mode (default: 50)
   --help                 Show this help
 
-Training pipeline example:
-  # First run (initializes from scratch or from seed genotypes):
+Training pipeline examples:
+  # Continuous mode (default):
   npx tsx apps/headless/src/main.ts --ticks 100000 --checkpoint checkpoint.json \\
     --export configs/seed-genotypes.json --max-creatures 300
 
-  # Resume training (continues from checkpoint):
-  npx tsx apps/headless/src/main.ts --ticks 100000 --checkpoint checkpoint.json \\
-    --export configs/seed-genotypes.json --max-creatures 300
-
-  # Use pre-trained genotypes as seed for new population:
-  npx tsx apps/headless/src/main.ts --ticks 50000 --seed configs/seed-genotypes.json \\
-    --checkpoint checkpoint.json --export configs/seed-genotypes.json
+  # Generational mode with NEAT speciation:
+  npx tsx apps/headless/src/main.ts --mode generational --generations 100 \\
+    --gen-ticks 2000 --export configs/seed-genotypes.json --max-creatures 300
 `);
     process.exit(0);
   }
@@ -71,6 +71,79 @@ Training pipeline example:
   if (opts.maxCreatures !== null) {
     config.simulation.maxCreatures = opts.maxCreatures;
   }
+
+  // ========================================
+  // Generational mode
+  // ========================================
+  if (opts.mode === 'generational') {
+    console.log('=== Living Bugs Headless Runner (Generational) ===');
+    console.log(`World: ${config.world.width}x${config.world.height}`);
+    console.log(`Generations: ${opts.generations} | Ticks/gen: ${opts.genTicks}`);
+    console.log(`Max creatures: ${config.simulation.maxCreatures}`);
+    console.log('');
+
+    // Load seed genotypes if provided
+    let seedDNA: import('@living-bugs/sim-core').DNA[] = [];
+    if (opts.seedGenotypesPath) {
+      seedDNA = loadSeedGenotypes(opts.seedGenotypesPath);
+      if (seedDNA.length > 0) {
+        console.log(`Loaded ${seedDNA.length} seed genotypes from ${opts.seedGenotypesPath}`);
+      }
+    }
+
+    let lastWorld: World | null = null;
+
+    const result = runGenerational(
+      config,
+      opts,
+      seedDNA.length > 0 ? seedDNA : undefined,
+      {
+        onGeneration: (stats) => {
+          console.log(
+            `[gen ${stats.generation.toString().padStart(4)}] ` +
+            `species: ${stats.speciesCount.toString().padStart(3)} | ` +
+            `pop: ${stats.populationSize.toString().padStart(5)} | ` +
+            `best: ${stats.bestFitness.toFixed(1).padStart(8)} | ` +
+            `avg: ${stats.avgFitness.toFixed(1).padStart(8)} | ` +
+            `worst: ${stats.worstFitness.toFixed(1).padStart(8)} | ` +
+            `${(stats.elapsedMs / 1000).toFixed(1)}s`
+          );
+        },
+        onCheckpoint: (world) => {
+          lastWorld = world;
+        },
+      }
+    );
+
+    const totalTime = (result.totalTimeMs / 1000).toFixed(2);
+    console.log(`\nGenerational training complete. ${result.totalGenerations} generations in ${totalTime}s`);
+    console.log(`Hall of Fame: ${result.hallOfFame.size} entries, best fitness: ${result.hallOfFame.getBest()?.fitness.toFixed(1) ?? 'N/A'}`);
+
+    // Export hall of fame genotypes
+    if (opts.exportPath) {
+      const hofEntries = result.hallOfFame.getTopK(opts.exportTopK);
+      const output = {
+        exportedAt: new Date().toISOString(),
+        mode: 'generational',
+        generations: result.totalGenerations,
+        count: hofEntries.length,
+        genotypes: hofEntries.map(e => ({
+          fitness: e.fitness,
+          dna: e.dna,
+          stats: e.stats,
+        })),
+      };
+      const outPath = resolve(opts.exportPath);
+      writeFileSync(outPath, JSON.stringify(output, null, 2));
+      console.log(`Exported top ${hofEntries.length} hall of fame genotypes to ${outPath}`);
+    }
+
+    return;
+  }
+
+  // ========================================
+  // Continuous mode (default)
+  // ========================================
 
   // Create world
   const world = new World(config);
@@ -129,7 +202,7 @@ Training pipeline example:
     onCheckpoint: (_w, ticksRun) => {
       if (opts.checkpointPath) {
         saveCheckpoint(world, opts.checkpointPath);
-        console.log(`  💾 Checkpoint saved (${ticksRun} ticks in this session, world tick ${world.tick})`);
+        console.log(`  Checkpoint saved (${ticksRun} ticks in this session, world tick ${world.tick})`);
       }
     },
   });

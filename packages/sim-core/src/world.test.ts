@@ -11,6 +11,7 @@ function testConfig(overrides: Partial<Record<string, unknown>> = {}): WorldConf
     simulation: { tickRate: 30, brainRate: 10, maxCreatures: 100, initialCreatures: 0, seed: 42 },
     energy: {
       initialEnergy: 100, maxEnergy: 300, baseMetabolism: 0.05,
+      densityMetabolismFactor: 0,
       moveCost: 0.02, turnCost: 0.01, attackCost: 2.0,
       visionCostPerRay: 0.005, broadcastCost: 0.03,
     },
@@ -23,6 +24,7 @@ function testConfig(overrides: Partial<Record<string, unknown>> = {}): WorldConf
     death: { foodDropRatio: 0.5, foodDropMax: 3 },
     donation: { donateRadius: 15, donateAmount: 10, donateCost: 1.0 },
     broadcast: { broadcastRadius: 100, signalChannels: 4 },
+    obstacles: { count: 0, minRadius: 10, maxRadius: 20 },
     creatureDefaults: { radius: 5, maxSpeed: 2.0, maxTurnRate: 0.15 },
     ...overrides,
   } as WorldConfig;
@@ -479,6 +481,200 @@ describe('World', () => {
 
     it('getCreatureById returns undefined for unknown id', () => {
       expect(world.getCreatureById(999)).toBeUndefined();
+    });
+  });
+
+  describe('obstacles', () => {
+    it('spawns obstacles during initialization', () => {
+      const cfg = testConfig();
+      cfg.obstacles = { count: 5, minRadius: 10, maxRadius: 20 };
+      cfg.simulation.initialCreatures = 3;
+      resetInnovationCounter();
+      const w = new World(cfg);
+      w.initialize();
+      expect(w.obstacles.size).toBe(5);
+      expect(w.getObstacleStates().length).toBe(5);
+    });
+
+    it('obstacle radii are within configured range', () => {
+      const cfg = testConfig();
+      cfg.obstacles = { count: 10, minRadius: 8, maxRadius: 25 };
+      resetInnovationCounter();
+      const w = new World(cfg);
+      w.initialize();
+      for (const obs of w.getObstacleStates()) {
+        expect(obs.radius).toBeGreaterThanOrEqual(8);
+        expect(obs.radius).toBeLessThanOrEqual(25);
+      }
+    });
+
+    it('creatures are pushed out of obstacles on collision', () => {
+      const cfg = testConfig();
+      cfg.obstacles = { count: 0, minRadius: 10, maxRadius: 20 };
+      resetInnovationCounter();
+      const w = new World(cfg);
+      w.initialize();
+
+      // Manually add a large obstacle at (100, 100) and rebuild hash
+      const obsId = w.nextEntityId++;
+      w.obstacles.set(obsId, { state: { id: obsId, position: { x: 100, y: 100 }, radius: 20 } });
+      (w as any).rebuildObstacleHash();
+
+      // Spawn a creature inside the obstacle (slightly off center)
+      const rng = new PRNG(1);
+      const dna = createDefaultDNA(0, rng);
+      const cId = w.spawnCreature(dna, { x: 105, y: 100 }, 0, 200);
+
+      // Prevent brain from running
+      (w as any).brainTickAccumulator = -100;
+      w.step();
+
+      const c = w.getCreatureById(cId);
+      if (c) {
+        // Creature should have been pushed outside the obstacle
+        const dx = c.position.x - 100;
+        const dy = c.position.y - 100;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        // Should be at least obstacle.radius + creature.radius - tolerance
+        expect(dist).toBeGreaterThanOrEqual(20 + dna.body.radius - 2);
+      }
+    });
+
+    it('food does not spawn inside obstacles during init', () => {
+      const cfg = testConfig();
+      cfg.world = { width: 100, height: 100, boundary: 'torus' };
+      cfg.obstacles = { count: 1, minRadius: 30, maxRadius: 30 };
+      cfg.food.maxCount = 20;
+      cfg.simulation.initialCreatures = 0;
+      resetInnovationCounter();
+      const w = new World(cfg);
+      w.initialize();
+
+      const obs = w.getObstacleStates()[0];
+      const food = w.getFoodStates();
+
+      // Most food should not overlap the obstacle
+      let overlapping = 0;
+      for (const f of food) {
+        const dx = f.position.x - obs.position.x;
+        const dy = f.position.y - obs.position.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist < obs.radius + cfg.food.radius) {
+          overlapping++;
+        }
+      }
+      // With 20 attempts per food, most should avoid the obstacle
+      // (some may still overlap due to the 20-attempt fallback)
+      expect(overlapping).toBeLessThan(food.length);
+    });
+
+    it('obstacles are included in snapshots', () => {
+      const cfg = testConfig();
+      cfg.obstacles = { count: 3, minRadius: 10, maxRadius: 20 };
+      cfg.simulation.initialCreatures = 2;
+      resetInnovationCounter();
+      const w = new World(cfg);
+      w.initialize();
+
+      const snap = w.getSnapshot();
+      expect(snap.obstacles.length).toBe(3);
+
+      // Load into fresh world
+      resetInnovationCounter();
+      const w2 = new World(testConfig());
+      w2.loadSnapshot(snap);
+      expect(w2.obstacles.size).toBe(3);
+      expect(w2.getObstacleStates()).toEqual(snap.obstacles);
+    });
+
+    it('getObstacleStates returns empty array when no obstacles', () => {
+      expect(world.getObstacleStates()).toEqual([]);
+    });
+  });
+
+  describe('density-dependent metabolism', () => {
+    it('metabolism increases with population density', () => {
+      const cfg = testConfig();
+      cfg.energy.baseMetabolism = 1.0; // high base to make the effect obvious
+      cfg.energy.densityMetabolismFactor = 4;
+      cfg.energy.moveCost = 0;
+      cfg.energy.turnCost = 0;
+      cfg.energy.attackCost = 0;
+      cfg.energy.visionCostPerRay = 0;
+      cfg.energy.broadcastCost = 0;
+      cfg.energy.initialEnergy = 200;
+      cfg.food.spawnRate = 0;
+      cfg.food.maxCount = 0;
+      cfg.combat.baseDamage = 0;
+      cfg.donation.donateAmount = 0;
+      cfg.donation.donateCost = 0;
+      cfg.simulation.initialCreatures = 0;
+      cfg.simulation.maxCreatures = 100;
+      cfg.simulation.brainRate = 1; // brain runs every 30 ticks, won't fire on tick 1
+      cfg.reproduction.energyThreshold = 9999; // prevent reproduction
+      resetInnovationCounter();
+
+      // Scenario 1: 1 creature (low density)
+      const w1 = new World(cfg);
+      w1.initialize();
+      const rng = new PRNG(123);
+      const dna = createDefaultDNA(0, rng);
+      (w1 as any).spawnCreature(dna, { x: 50, y: 50 }, 0, 200);
+      w1.step();
+      const energy1 = w1.getCreatureStates()[0].energy;
+      const cost1 = 200 - energy1;
+
+      // Scenario 2: 50 creatures spread far apart (high density)
+      resetInnovationCounter();
+      const w2 = new World(cfg);
+      w2.initialize();
+      const rng2 = new PRNG(456);
+      for (let i = 0; i < 50; i++) {
+        (w2 as any).spawnCreature(createDefaultDNA(0, rng2), { x: (i % 10) * 20, y: Math.floor(i / 10) * 20 }, 0, 200);
+      }
+      w2.step();
+      const states2 = w2.getCreatureStates();
+      const cost2 = 200 - states2[0].energy;
+
+      // High density should have higher metabolism cost
+      expect(cost2).toBeGreaterThan(cost1);
+      // At density 50/100=0.5, multiplier = 1 + 4*0.5 = 3.0
+      // At density 1/100=0.01, multiplier = 1 + 4*0.01 = 1.04
+      expect(cost2 / cost1).toBeCloseTo(3.0 / 1.04, 0);
+    });
+
+    it('densityMetabolismFactor=0 disables density scaling', () => {
+      const cfg = testConfig();
+      cfg.energy.baseMetabolism = 1.0;
+      cfg.energy.densityMetabolismFactor = 0;
+      cfg.energy.moveCost = 0;
+      cfg.energy.turnCost = 0;
+      cfg.energy.attackCost = 0;
+      cfg.energy.visionCostPerRay = 0;
+      cfg.energy.broadcastCost = 0;
+      cfg.energy.initialEnergy = 200;
+      cfg.food.spawnRate = 0;
+      cfg.food.maxCount = 0;
+      cfg.combat.baseDamage = 0;
+      cfg.donation.donateAmount = 0;
+      cfg.donation.donateCost = 0;
+      cfg.simulation.initialCreatures = 0;
+      cfg.simulation.maxCreatures = 100;
+      cfg.simulation.brainRate = 1;
+      cfg.reproduction.energyThreshold = 9999;
+      resetInnovationCounter();
+
+      const rng3 = new PRNG(789);
+      const w = new World(cfg);
+      w.initialize();
+      for (let i = 0; i < 50; i++) {
+        (w as any).spawnCreature(createDefaultDNA(0, rng3), { x: (i % 10) * 20, y: Math.floor(i / 10) * 20 }, 0, 200);
+      }
+      w.step();
+      const states = w.getCreatureStates();
+      const cost = 200 - states[0].energy;
+      // Should be exactly base metabolism (1.0) since factor is 0
+      expect(cost).toBeCloseTo(1.0, 1);
     });
   });
 });

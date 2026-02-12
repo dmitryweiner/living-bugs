@@ -15,6 +15,7 @@
     "initialEnergy": 150,
     "maxEnergy": 500,
     "baseMetabolism": 0.05,
+    "densityMetabolismFactor": 5,
     "moveCost": 0.02,
     "turnCost": 0.01,
     "attackCost": 2.0,

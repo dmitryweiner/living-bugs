@@ -629,10 +629,12 @@
   resolved "https://npm.dev.wixpress.com/api/npm/npm-repos/@types/estree/-/estree-1.0.8.tgz#958b91c991b1867ced318bedea0e215ee050726e"
   integrity sha512-dWHzHa2WqEXI/O1E9OjrocMTKJl2mSrEolh1Iomrv6U+JuNwaHXsXx9bLu5gG7BUWFIN0skIQJQ/L1rIex4X6w==
 
-"@types/matter-js@^0.19.7":
-  version "0.19.8"
-  resolved "https://npm.dev.wixpress.com/api/npm/npm-repos/@types/matter-js/-/matter-js-0.19.8.tgz#ce1a7f743b8520f58cda2c5b06434a46c6731fed"
-  integrity sha512-W2ZWG58Lijv/4v768NgpeyFqqiOyslmAU7qqM1Lhz4XBoUgGtZtPz4CjcOKYtqHIak14dvPldslQhltqLTWwsw==
+"@types/node@^25.2.0":
+  version "25.2.0"
+  resolved "https://npm.dev.wixpress.com/api/npm/npm-repos/@types/node/-/node-25.2.0.tgz#015b7d228470c1dcbfc17fe9c63039d216b4d782"
+  integrity sha512-DZ8VwRFUNzuqJ5khrvwMXHmvPe+zGayJhr2CDNiKB1WBE1ST8Djl00D0IC4vvNmHMdj6DlbYRIaFE7WHjlDl5w==
+  dependencies:
+    undici-types "~7.16.0"
 
 "@vitest/expect@4.0.18":
   version "4.0.18"
@@ -917,11 +919,6 @@ math-intrinsics@^1.1.0:
   resolved "https://npm.dev.wixpress.com/api/npm/npm-repos/math-intrinsics/-/math-intrinsics-1.1.0.tgz#a0dd74be81e2aa5c2f27e65ce283605ee4e2b7f9"
   integrity sha512-/IXtbwEk5HTPyEwyKX6hGkYXxM9nbj64B+ilVJnC/R6B0pH5G4V3b0pVbL7DBj4tkhBAppbQUlf6F6Xl9LHu1g==
 
-matter-js@^0.20.0:
-  version "0.20.0"
-  resolved "https://npm.dev.wixpress.com/api/npm/npm-repos/matter-js/-/matter-js-0.20.0.tgz#dc3c95c40ea5ef8937788a2770c3f97223b352ed"
-  integrity sha512-iC9fYR7zVT3HppNnsFsp9XOoQdQN2tUyfaKg4CHLH8bN+j6GT4Gw7IH2rP0tflAebrHFw730RR3DkVSZRX8hwA==
-
 nanoid@^3.3.11:
   version "3.3.11"
   resolved "https://npm.dev.wixpress.com/api/npm/npm-repos/nanoid/-/nanoid-3.3.11.tgz#4f4f112cefbe303202f2199838128936266d185b"
@@ -1150,6 +1147,11 @@ typescript@^5.3.0:
   version "5.9.3"
   resolved "https://npm.dev.wixpress.com/api/npm/npm-repos/typescript/-/typescript-5.9.3.tgz#5b4f59e15310ab17a216f5d6cf53ee476ede670f"
   integrity sha512-jl1vZzPDinLr9eUt3J/t7V6FgNEw9QjvBPdysz9KfQDD41fQrC2Y4vKQdiaUpFT4bXlb1RHhLpp8wtm6M5TgSw==
+
+undici-types@~7.16.0:
+  version "7.16.0"
+  resolved "https://npm.dev.wixpress.com/api/npm/npm-repos/undici-types/-/undici-types-7.16.0.tgz#ffccdff36aea4884cbfce9a750a0580224f58a46"
+  integrity sha512-Zz+aZWSj8LE6zoxD+xrjh4VfkIG8Ya6LvYkZqtUQGJPZjYl53ypCaUwWqo7eI0x66KBGeRo+mlBEkMSeSZ38Nw==
 
 url@^0.11.0:
   version "0.11.4"

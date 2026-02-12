@@ -7,14 +7,15 @@
   "simulation": {
     "tickRate": 30,
     "brainRate": 10,
-    "maxCreatures": 1000,
-    "initialCreatures": 30,
+    "maxCreatures": 500,
+    "initialCreatures": 50,
     "seed": 42
   },
   "energy": {
     "initialEnergy": 120,
-    "maxEnergy": 500,
+    "maxEnergy": 400,
     "baseMetabolism": 0.08,
+    "densityMetabolismFactor": 15,
     "moveCost": 0.02,
     "turnCost": 0.01,
     "attackCost": 2.0,
@@ -22,9 +23,9 @@
     "broadcastCost": 0.03
   },
   "food": {
-    "spawnRate": 10,
-    "nutritionValue": 30,
-    "maxCount": 1200,
+    "spawnRate": 8,
+    "nutritionValue": 25,
+    "maxCount": 500,
     "radius": 4
   },
   "combat": {
@@ -33,15 +34,15 @@
     "attackCooldown": 5
   },
   "reproduction": {
-    "energyThreshold": 180,
+    "energyThreshold": 200,
     "offspringEnergyShare": 0.4,
-    "mutationRate": 0.1,
-    "mutationStrength": 0.2,
-    "cooldown": 40
+    "mutationRate": 0.15,
+    "mutationStrength": 0.3,
+    "cooldown": 80
   },
   "death": {
-    "foodDropRatio": 0.5,
-    "foodDropMax": 5
+    "foodDropRatio": 0.25,
+    "foodDropMax": 3
   },
   "donation": {
     "donateRadius": 15,
@@ -51,6 +52,11 @@
   "broadcast": {
     "broadcastRadius": 100,
     "signalChannels": 4
+  },
+  "obstacles": {
+    "count": 35,
+    "minRadius": 15,
+    "maxRadius": 45
   },
   "creatureDefaults": {
     "radius": 5,

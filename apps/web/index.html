@@ -35,14 +35,27 @@
     #controls button.active { background: #1565c0; border-color: #42a5f5; }
     #controls .speed-label { font-size: 12px; color: #888; }
 
-    /* Inspector panel */
+    /* Inspector panel — bottom-left overlay */
     #inspector {
-      width: 300px; background: #111; border-left: 1px solid #222;
-      padding: 16px; overflow-y: auto; display: none;
+      position: absolute; bottom: 60px; left: 12px;
+      background: rgba(10,10,10,0.92); border: 1px solid #333; border-radius: 8px;
+      padding: 0; width: 280px; max-height: 340px; overflow-y: auto;
+      display: none; z-index: 10; font-size: 12px;
     }
     #inspector.open { display: block; }
-    #inspector h3 { margin-bottom: 10px; font-size: 15px; color: #4fc3f7; }
-    #inspector .field { margin-bottom: 6px; font-size: 13px; }
+    #inspector-header {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 8px 12px; border-bottom: 1px solid #333; position: sticky; top: 0;
+      background: rgba(10,10,10,0.98); z-index: 1;
+    }
+    #inspector-header h3 { font-size: 13px; color: #4fc3f7; margin: 0; }
+    #inspector-close {
+      background: none; border: none; color: #888; cursor: pointer; font-size: 16px;
+      padding: 0 4px; line-height: 1;
+    }
+    #inspector-close:hover { color: #e0e0e0; }
+    #inspector-content { padding: 8px 12px 12px; }
+    #inspector .field { margin-bottom: 4px; font-size: 12px; }
     #inspector .field .label { color: #888; }
     #inspector .field .value { color: #e0e0e0; }
 
@@ -50,14 +63,144 @@
     #sandbox-tools {
       position: absolute; top: 12px; right: 12px;
       background: rgba(0,0,0,0.7); border: 1px solid #333; border-radius: 8px;
-      padding: 10px; display: flex; flex-direction: column; gap: 6px;
+      padding: 0; display: flex; flex-direction: column; z-index: 5;
     }
-    #sandbox-tools button {
+    #sandbox-toggle {
+      background: rgba(0,0,0,0.5); border: none; border-bottom: 1px solid #333;
+      color: #4fc3f7; cursor: pointer; font-size: 12px; font-weight: 600;
+      padding: 8px 12px; text-align: left; border-radius: 8px 8px 0 0;
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    #sandbox-toggle:hover { background: rgba(255,255,255,0.05); }
+    #sandbox-toggle .arrow { transition: transform 0.2s; font-size: 10px; }
+    #sandbox-tools.collapsed #sandbox-toggle { border-bottom: none; border-radius: 8px; }
+    #sandbox-tools.collapsed #sandbox-toggle .arrow { transform: rotate(180deg); }
+    #sandbox-tools-body { padding: 8px 10px; display: flex; flex-direction: column; gap: 6px; }
+    #sandbox-tools.collapsed #sandbox-tools-body { display: none; }
+    #sandbox-tools-body button {
       background: #1a1a2e; border: 1px solid #444; color: #e0e0e0; border-radius: 6px;
       padding: 6px 12px; cursor: pointer; font-size: 12px; text-align: left;
     }
-    #sandbox-tools button:hover { background: #2a2a4e; }
-    #sandbox-tools button.active { background: #1565c0; border-color: #42a5f5; }
+    #sandbox-tools-body button:hover { background: #2a2a4e; }
+    #sandbox-tools-body button.active { background: #1565c0; border-color: #42a5f5; }
+
+    /* Config Editor Panel */
+    .config-editor {
+      position: absolute; top: 12px; left: 250px;
+      background: rgba(10,10,10,0.92); border: 1px solid #333; border-radius: 8px;
+      padding: 0; width: 320px; max-height: calc(100vh - 80px); overflow-y: auto;
+      display: none; font-size: 12px; z-index: 10;
+    }
+    .config-editor.open { display: block; }
+    .config-editor-header {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 10px 14px; border-bottom: 1px solid #333; position: sticky; top: 0;
+      background: rgba(10,10,10,0.98); z-index: 1;
+    }
+    .config-editor-header h3 { font-size: 14px; color: #4fc3f7; margin: 0; }
+    .config-reset-btn {
+      background: #2a1a1a; border: 1px solid #663333; color: #ff8a80; border-radius: 4px;
+      padding: 3px 10px; cursor: pointer; font-size: 11px;
+    }
+    .config-reset-btn:hover { background: #3a2a2a; }
+    .config-section { border-bottom: 1px solid #222; }
+    .config-section.collapsed .config-fields { display: none; }
+    .config-cat-header {
+      padding: 8px 14px; color: #aaa; font-weight: 600; cursor: pointer;
+      user-select: none; font-size: 12px;
+    }
+    .config-cat-header:hover { background: rgba(255,255,255,0.03); }
+    .config-fields { padding: 0 14px 10px; }
+    .config-field { margin-bottom: 8px; }
+    .config-label { display: block; color: #888; margin-bottom: 2px; font-size: 11px; }
+    .config-controls { display: flex; gap: 8px; align-items: center; }
+    .config-slider {
+      flex: 1; height: 4px; appearance: none; background: #333; border-radius: 2px; outline: none;
+    }
+    .config-slider::-webkit-slider-thumb {
+      appearance: none; width: 12px; height: 12px; background: #4fc3f7;
+      border-radius: 50%; cursor: pointer;
+    }
+    .config-number {
+      width: 60px; background: #1a1a2e; border: 1px solid #444; color: #e0e0e0;
+      border-radius: 4px; padding: 2px 6px; font-size: 11px; text-align: right;
+    }
+    .config-number:disabled { opacity: 0.4; }
+
+    /* Analytics Panel */
+    #analytics-panel {
+      position: absolute; bottom: 60px; left: 12px;
+      background: rgba(10,10,10,0.85); border: 1px solid #333; border-radius: 8px;
+      padding: 10px; display: none; z-index: 10;
+    }
+    #analytics-panel.open { display: block; }
+    #analytics-panel h4 { font-size: 12px; color: #4fc3f7; margin: 0 0 8px; }
+    #analytics-panel canvas { display: block; border-radius: 4px; }
+
+    /* Minimap */
+    #minimap-container {
+      position: absolute; bottom: 60px; right: 12px;
+      background: rgba(10,10,10,0.85); border: 1px solid #333; border-radius: 8px;
+      padding: 4px; display: none; z-index: 10;
+    }
+    #minimap-container.open { display: block; }
+    #minimap-container canvas { display: block; border-radius: 4px; cursor: pointer; }
+
+    /* Genotype Browser */
+    .genotype-browser {
+      position: absolute; top: 12px; left: 250px;
+      background: rgba(10,10,10,0.92); border: 1px solid #333; border-radius: 8px;
+      width: 360px; max-height: calc(100vh - 80px); overflow-y: auto;
+      display: none; font-size: 12px; z-index: 10;
+    }
+    .genotype-browser.open { display: block; }
+    .genotype-header {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 10px 14px; border-bottom: 1px solid #333; position: sticky; top: 0;
+      background: rgba(10,10,10,0.98); z-index: 1;
+    }
+    .genotype-header h3 { font-size: 14px; color: #4fc3f7; margin: 0; }
+    .genotype-compare-btn {
+      background: #1a1a2e; border: 1px solid #444; color: #e0e0e0; border-radius: 4px;
+      padding: 3px 10px; cursor: pointer; font-size: 11px;
+    }
+    .genotype-compare-btn.active { background: #1565c0; border-color: #42a5f5; }
+    .genotype-empty { padding: 20px 14px; color: #666; text-align: center; }
+    .genotype-row {
+      padding: 8px 14px; border-bottom: 1px solid #1a1a1a; display: flex;
+      align-items: center; gap: 8px;
+    }
+    .genotype-row:hover { background: rgba(255,255,255,0.03); }
+    .genotype-row.selected { background: rgba(21, 101, 192, 0.2); }
+    .genotype-label { font-weight: 600; color: #e0e0e0; min-width: 100px; }
+    .genotype-info { flex: 1; display: flex; flex-wrap: wrap; gap: 4px; }
+    .gi-tag {
+      font-size: 10px; padding: 1px 5px; border-radius: 3px; font-weight: 600;
+    }
+    .gi-tag.seed { background: #1b5e20; color: #a5d6a7; }
+    .gi-tag.current { background: #0d47a1; color: #90caf9; }
+    .gi-tag.hof { background: #e65100; color: #ffcc80; }
+    .gi-fitness { color: #ffb74d; font-weight: 600; font-size: 11px; }
+    .gi-detail { color: #888; font-size: 10px; }
+    .genotype-actions button {
+      background: #1a1a2e; border: 1px solid #444; color: #e0e0e0; border-radius: 4px;
+      padding: 3px 8px; cursor: pointer; font-size: 10px;
+    }
+    .genotype-actions button:hover { background: #2a2a4e; }
+    .genotype-compare { padding: 10px 14px; }
+    .compare-header {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-bottom: 10px;
+    }
+    .compare-header strong { color: #ffb74d; }
+    .compare-back-btn {
+      background: #1a1a2e; border: 1px solid #444; color: #e0e0e0; border-radius: 4px;
+      padding: 3px 8px; cursor: pointer; font-size: 11px;
+    }
+    .compare-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+    .compare-table th { color: #4fc3f7; text-align: left; padding: 4px 6px; border-bottom: 1px solid #333; }
+    .compare-table td { padding: 3px 6px; border-bottom: 1px solid #1a1a1a; color: #ccc; }
+    .compare-table td:first-child { color: #888; }
   </style>
 </head>
 <body>
@@ -72,27 +215,47 @@
       </div>
 
       <div id="sandbox-tools">
-        <button id="tool-none" class="active">Select</button>
-        <button id="tool-food">Place Food</button>
-        <button id="tool-creature">Place Creature</button>
-        <button id="tool-save">Save World</button>
-        <button id="tool-load">Load World</button>
-        <button id="tool-import">Import Genotypes</button>
-        <hr style="border-color:#333; margin:2px 0;">
-        <button id="tool-reset" style="color:#ff6b6b;">Reset World</button>
+        <button id="sandbox-toggle">Tools <span class="arrow">&#9650;</span></button>
+        <div id="sandbox-tools-body">
+          <button id="tool-none" class="active">Select</button>
+          <button id="tool-food">Place Food</button>
+          <button id="tool-creature">Place Creature</button>
+          <button id="tool-save">Save World</button>
+          <button id="tool-load">Load World</button>
+          <button id="tool-import">Import Genotypes</button>
+          <hr style="border-color:#333; margin:2px 0;">
+          <button id="tool-config">Config</button>
+          <button id="tool-genotypes">Genotypes</button>
+          <button id="tool-analytics">Analytics</button>
+          <button id="tool-minimap">Minimap</button>
+          <hr style="border-color:#333; margin:2px 0;">
+          <button id="tool-reset" style="color:#ff6b6b;">Reset World</button>
+        </div>
+      </div>
+
+      <div id="analytics-panel">
+        <h4>Population Analytics</h4>
+        <canvas id="analytics-canvas" width="280" height="200"></canvas>
+      </div>
+
+      <div id="minimap-container">
+        <canvas id="minimap-canvas" width="180" height="180"></canvas>
       </div>
 
       <div id="controls">
         <button id="btn-pause">Pause</button>
+        <span class="speed-label">Speed:</span>
+        <button id="btn-speed01">0.1x</button>
         <button id="btn-speed1" class="active">1x</button>
-        <button id="btn-speed3">3x</button>
         <button id="btn-speed10">10x</button>
-        <span class="speed-label">Speed</span>
       </div>
-    </div>
-    <div id="inspector">
-      <h3>Creature Inspector</h3>
-      <div id="inspector-content">Click a creature to inspect</div>
+      <div id="inspector">
+        <div id="inspector-header">
+          <h3>Creature Inspector</h3>
+          <button id="inspector-close">&times;</button>
+        </div>
+        <div id="inspector-content">Click a creature to inspect</div>
+      </div>
     </div>
   </div>
   <script type="module" src="/src/main.ts"></script>

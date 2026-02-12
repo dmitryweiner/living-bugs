@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { World, resetInnovationCounter } from '@living-bugs/sim-core';
 import type { WorldConfig } from '@living-bugs/sim-core';
-import { parseArgs, runSimulation, rankGenotypes, type RunOptions } from './run.js';
+import { parseArgs, runSimulation, runGenerational, rankGenotypes, type RunOptions } from './run.js';
 
 function defaultOpts(overrides: Partial<RunOptions> = {}): RunOptions {
   return {
@@ -13,6 +13,9 @@ function defaultOpts(overrides: Partial<RunOptions> = {}): RunOptions {
     checkpointPath: null,
     checkpointInterval: 10000,
     seedGenotypesPath: null,
+    mode: 'continuous',
+    genTicks: 1000,
+    generations: 50,
     ...overrides,
   };
 }
@@ -23,6 +26,7 @@ function testConfig(): WorldConfig {
     simulation: { tickRate: 30, brainRate: 10, maxCreatures: 100, initialCreatures: 10, seed: 42 },
     energy: {
       initialEnergy: 150, maxEnergy: 300, baseMetabolism: 0.05,
+      densityMetabolismFactor: 0,
       moveCost: 0.02, turnCost: 0.01, attackCost: 2.0,
       visionCostPerRay: 0.005, broadcastCost: 0.03,
     },
@@ -35,6 +39,7 @@ function testConfig(): WorldConfig {
     death: { foodDropRatio: 0.5, foodDropMax: 3 },
     donation: { donateRadius: 15, donateAmount: 10, donateCost: 1.0 },
     broadcast: { broadcastRadius: 100, signalChannels: 4 },
+    obstacles: { count: 0, minRadius: 10, maxRadius: 20 },
     creatureDefaults: { radius: 5, maxSpeed: 2.0, maxTurnRate: 0.15 },
   };
 }
@@ -95,6 +100,28 @@ describe('headless runner', () => {
     it('parses --max-creatures', () => {
       const opts = parseArgs(['--max-creatures', '200']);
       expect(opts.maxCreatures).toBe(200);
+    });
+
+    it('parses --mode', () => {
+      const opts = parseArgs(['--mode', 'generational']);
+      expect(opts.mode).toBe('generational');
+    });
+
+    it('parses --gen-ticks', () => {
+      const opts = parseArgs(['--gen-ticks', '2000']);
+      expect(opts.genTicks).toBe(2000);
+    });
+
+    it('parses --generations', () => {
+      const opts = parseArgs(['--generations', '100']);
+      expect(opts.generations).toBe(100);
+    });
+
+    it('defaults mode to continuous', () => {
+      const opts = parseArgs([]);
+      expect(opts.mode).toBe('continuous');
+      expect(opts.genTicks).toBe(1000);
+      expect(opts.generations).toBe(50);
     });
 
     it('parses multiple flags', () => {
@@ -193,6 +220,68 @@ describe('headless runner', () => {
       for (let i = 0; i < 5; i++) world.step();
       const ranked = rankGenotypes(world, 3);
       expect(ranked.length).toBeLessThanOrEqual(3);
+    });
+  });
+
+  describe('runGenerational', () => {
+    it('runs for the specified number of generations', () => {
+      const config = testConfig();
+      const result = runGenerational(
+        config,
+        defaultOpts({ generations: 3, genTicks: 50 }),
+      );
+      expect(result.totalGenerations).toBe(3);
+      expect(result.totalTimeMs).toBeGreaterThan(0);
+      expect(result.finalStats).not.toBeNull();
+    });
+
+    it('calls onGeneration callback for each generation', () => {
+      const config = testConfig();
+      const gens: number[] = [];
+      runGenerational(
+        config,
+        defaultOpts({ generations: 5, genTicks: 30 }),
+        undefined,
+        { onGeneration: (stats) => gens.push(stats.generation) },
+      );
+      expect(gens).toEqual([1, 2, 3, 4, 5]);
+    });
+
+    it('reports species count in stats', () => {
+      const config = testConfig();
+      let lastStats: import('./run.js').GenerationStats | null = null;
+      runGenerational(
+        config,
+        defaultOpts({ generations: 3, genTicks: 100 }),
+        undefined,
+        { onGeneration: (stats) => { lastStats = stats; } },
+      );
+      expect(lastStats).not.toBeNull();
+      expect(lastStats!.speciesCount).toBeGreaterThanOrEqual(0);
+    });
+
+    it('recovers when all creatures die in a generation', () => {
+      const config = testConfig();
+      config.energy.initialEnergy = 5; // very low energy
+      config.food.spawnRate = 0; // no food
+      const result = runGenerational(
+        config,
+        defaultOpts({ generations: 3, genTicks: 200 }),
+      );
+      // Should complete without crashing
+      expect(result.totalGenerations).toBe(3);
+    });
+
+    it('calls onCheckpoint with the world', () => {
+      const config = testConfig();
+      let checkpointCount = 0;
+      runGenerational(
+        config,
+        defaultOpts({ generations: 3, genTicks: 30 }),
+        undefined,
+        { onCheckpoint: () => { checkpointCount++; } },
+      );
+      expect(checkpointCount).toBe(3);
     });
   });
 });
