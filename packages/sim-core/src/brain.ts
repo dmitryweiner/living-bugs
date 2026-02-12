@@ -13,6 +13,8 @@ export interface BrainRuntime {
   nodeIdToIndex: Map<number, number>;  // nodeGene.id → index in arrays
   activations: Float32Array;     // Current values
   prevActivations: Float32Array; // Previous tick values (for recurrent connections)
+  // Pre-computed per-node activation type (indexed by node index)
+  _nodeActivationTypes: ActivationType[];
   // Connection data (parallel arrays for performance)
   connFrom: Int32Array;          // Index of source node
   connTo: Int32Array;            // Index of target node
@@ -72,6 +74,15 @@ export function buildBrainRuntime(genome: BrainGenome): BrainRuntime {
   // Only non-input nodes need evaluation
   const evalOrder = topologicalSort(genome, nodeIdToIndex, inputs.length);
 
+  // Pre-compute activation type per node index for fast lookup
+  const _nodeActivationTypes: ActivationType[] = new Array(nodeCount).fill('linear');
+  for (const ng of genome.nodeGenes) {
+    const nIdx = nodeIdToIndex.get(ng.id);
+    if (nIdx !== undefined) {
+      _nodeActivationTypes[nIdx] = ng.activation;
+    }
+  }
+
   return {
     genome,
     nodeCount,
@@ -81,6 +92,7 @@ export function buildBrainRuntime(genome: BrainGenome): BrainRuntime {
     nodeIdToIndex,
     activations: new Float32Array(nodeCount),
     prevActivations: new Float32Array(nodeCount),
+    _nodeActivationTypes,
     connFrom,
     connTo,
     connWeight,
@@ -178,27 +190,25 @@ export function brainForwardPass(
     activations[i] = 0;
   }
 
-  // Accumulate weighted inputs
-  for (let c = 0; c < connCount; c++) {
-    if (!connEnabled[c]) continue;
-    const from = connFrom[c];
-    const to = connTo[c];
-    if (from < 0 || to < 0 || to < inputCount) continue;
-    // Use prevActivations for source if it hasn't been evaluated yet
-    // (simplified: just use current activations, which is fine with topological order)
-    activations[to] += connWeight[c] * activations[from];
-  }
+  // Build a fast index→activation lookup for node genes
+  const nodeActivationTypes = rt._nodeActivationTypes;
 
-  // Apply activation functions in topological order
-  const genome = rt.genome;
+  // Process each non-input node in topological order:
+  // 1. Accumulate incoming weighted signals
+  // 2. Apply activation function
+  // This ensures hidden nodes are fully evaluated before their outputs are used.
   for (const ni of evalOrder) {
-    const nodeGene = genome.nodeGenes.find((_, idx) => {
-      const mapped = rt.nodeIdToIndex.get(genome.nodeGenes[idx].id);
-      return mapped === ni;
-    });
-    if (nodeGene) {
-      activations[ni] = activate(activations[ni], nodeGene.activation);
+    // Accumulate weighted inputs for this node
+    for (let c = 0; c < connCount; c++) {
+      if (!connEnabled[c]) continue;
+      if (connTo[c] !== ni) continue;
+      const from = connFrom[c];
+      if (from < 0) continue;
+      activations[ni] += connWeight[c] * activations[from];
     }
+
+    // Apply activation function
+    activations[ni] = activate(activations[ni], nodeActivationTypes[ni]);
   }
 
   // Extract outputs (they are at indices inputCount..inputCount+outputCount-1)

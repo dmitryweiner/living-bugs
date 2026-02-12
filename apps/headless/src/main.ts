@@ -1,8 +1,9 @@
 import { World } from '@living-bugs/sim-core';
-import type { WorldConfig, TickMetrics } from '@living-bugs/sim-core';
-import { readFileSync, writeFileSync, existsSync } from 'fs';
+import type { WorldConfig } from '@living-bugs/sim-core';
+import { readFileSync } from 'fs';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
+import { parseArgs, runSimulation, exportBestGenotypes } from './run.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -17,41 +18,14 @@ function loadConfig(): WorldConfig {
 }
 
 // ============================================================
-// CLI arguments
+// Main
 // ============================================================
 
-interface RunOptions {
-  ticks: number;
-  logInterval: number;
-  exportPath: string | null;
-  exportTopK: number;
-}
-
-function parseArgs(): RunOptions {
+function main(): void {
   const args = process.argv.slice(2);
-  const opts: RunOptions = {
-    ticks: 3000,
-    logInterval: 100,
-    exportPath: null,
-    exportTopK: 20,
-  };
 
-  for (let i = 0; i < args.length; i++) {
-    switch (args[i]) {
-      case '--ticks':
-        opts.ticks = parseInt(args[++i], 10);
-        break;
-      case '--log-interval':
-        opts.logInterval = parseInt(args[++i], 10);
-        break;
-      case '--export':
-        opts.exportPath = args[++i];
-        break;
-      case '--top-k':
-        opts.exportTopK = parseInt(args[++i], 10);
-        break;
-      case '--help':
-        console.log(`
+  if (args.includes('--help')) {
+    console.log(`
 Living Bugs Headless Runner
 
 Usage: npm start -- [options]
@@ -63,19 +37,10 @@ Options:
   --top-k N          Number of top genotypes to export (default: 20)
   --help             Show this help
 `);
-        process.exit(0);
-    }
+    process.exit(0);
   }
 
-  return opts;
-}
-
-// ============================================================
-// Main
-// ============================================================
-
-function main(): void {
-  const opts = parseArgs();
+  const opts = parseArgs(args);
   const config = loadConfig();
 
   console.log('=== Living Bugs Headless Runner ===');
@@ -86,70 +51,30 @@ function main(): void {
   const world = new World(config);
   world.initialize();
 
-  const startTime = performance.now();
-  let lastMetrics: TickMetrics | null = null;
+  const result = runSimulation(world, opts, (metrics, elapsed) => {
+    console.log(
+      `[tick ${metrics.tick.toString().padStart(6)}] ` +
+      `creatures: ${metrics.creatureCount.toString().padStart(5)} | ` +
+      `food: ${metrics.foodCount.toString().padStart(5)} | ` +
+      `avg energy: ${metrics.avgEnergy.toFixed(1).padStart(7)} | ` +
+      `avg age: ${metrics.avgAge.toFixed(0).padStart(5)} | ` +
+      `births: ${metrics.births.toString().padStart(3)} | ` +
+      `deaths: ${metrics.deaths.toString().padStart(3)} | ` +
+      `${elapsed.toFixed(1)}s`
+    );
+  });
 
-  for (let t = 0; t < opts.ticks; t++) {
-    lastMetrics = world.step();
-
-    if ((t + 1) % opts.logInterval === 0) {
-      const elapsed = ((performance.now() - startTime) / 1000).toFixed(1);
-      console.log(
-        `[tick ${lastMetrics.tick.toString().padStart(6)}] ` +
-        `creatures: ${lastMetrics.creatureCount.toString().padStart(5)} | ` +
-        `food: ${lastMetrics.foodCount.toString().padStart(5)} | ` +
-        `avg energy: ${lastMetrics.avgEnergy.toFixed(1).padStart(7)} | ` +
-        `avg age: ${lastMetrics.avgAge.toFixed(0).padStart(5)} | ` +
-        `births: ${lastMetrics.births.toString().padStart(3)} | ` +
-        `deaths: ${lastMetrics.deaths.toString().padStart(3)} | ` +
-        `${elapsed}s`
-      );
-    }
-
-    // Early stop if no creatures left
-    if (lastMetrics.creatureCount === 0) {
-      console.log(`\nAll creatures died at tick ${lastMetrics.tick}. Stopping.`);
-      break;
-    }
+  if (result.stoppedEarly && result.finalMetrics) {
+    console.log(`\nAll creatures died at tick ${result.finalMetrics.tick}. Stopping.`);
   }
 
-  const totalTime = ((performance.now() - startTime) / 1000).toFixed(2);
+  const totalTime = (result.totalTimeMs / 1000).toFixed(2);
   console.log(`\nSimulation complete. Total time: ${totalTime}s`);
-  console.log(`Final: ${lastMetrics?.creatureCount ?? 0} creatures, ${lastMetrics?.foodCount ?? 0} food`);
+  console.log(`Final: ${result.finalMetrics?.creatureCount ?? 0} creatures, ${result.finalMetrics?.foodCount ?? 0} food`);
 
-  // Export best genotypes
   if (opts.exportPath) {
     exportBestGenotypes(world, opts.exportPath, opts.exportTopK);
   }
-}
-
-// ============================================================
-// Export
-// ============================================================
-
-function exportBestGenotypes(world: World, path: string, topK: number): void {
-  const creatures = world.getCreatureStates();
-
-  // Fitness = age * (energy / maxEnergy)
-  const ranked = creatures
-    .map(c => ({
-      fitness: c.age * (c.energy / world.config.energy.maxEnergy),
-      dna: c.dna,
-      stats: { age: c.age, energy: c.energy, groupId: c.dna.groupId },
-    }))
-    .sort((a, b) => b.fitness - a.fitness)
-    .slice(0, topK);
-
-  const output = {
-    exportedAt: new Date().toISOString(),
-    tick: world.tick,
-    count: ranked.length,
-    genotypes: ranked,
-  };
-
-  const outPath = resolve(path);
-  writeFileSync(outPath, JSON.stringify(output, null, 2));
-  console.log(`\nExported top ${ranked.length} genotypes to ${outPath}`);
 }
 
 main();

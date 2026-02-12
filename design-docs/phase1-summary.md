@@ -113,6 +113,11 @@ npm install          # Install all workspace dependencies
 npm run dev:web      # Web app at http://localhost:3000
 npm run build:web    # Build web app to /docs for GitHub Pages
 
+# Tests
+npm test             # Run all unit tests (vitest)
+npm run test:watch   # Run tests in watch mode
+npm run test:coverage # Run with coverage report
+
 # Headless simulation
 npx tsx apps/headless/src/main.ts                          # Default: 3000 ticks
 npx tsx apps/headless/src/main.ts --ticks 10000            # Custom tick count
@@ -132,6 +137,32 @@ npx tsx apps/headless/src/main.ts --export best.json       # Export top genotype
 | DNA default sensors | rayVision (3 rays), touch, energySense |
 | DNA default actuators | move, eat |
 | Default brain | fully connected input→output, ~18 connections |
+
+---
+
+## Testing
+
+The project uses **Vitest** for unit tests. Tests cover:
+
+| Module | File | Tests | What's covered |
+|--------|------|-------|----------------|
+| PRNG | `packages/sim-core/src/prng.test.ts` | 15 | Determinism, range, distribution, state save/restore |
+| Geometry | `packages/sim-core/src/geometry.test.ts` | 23 | Torus wrapping, distance, circle overlap, ray-circle intersection |
+| DNA | `packages/sim-core/src/dna.test.ts` | 29 | I/O counting, brain creation, default DNA, mutation invariants |
+| Brain | `packages/sim-core/src/brain.test.ts` | 17 | Build runtime, forward pass (linear, relu, sigmoid, tanh, step, hidden layers), Hebbian plasticity |
+| World | `packages/sim-core/src/world.test.ts` | 31 | Init, spawn, step, metabolism, starvation, eating, reproduction, combat+IFF, food spawning, metrics, snapshot, determinism |
+| Headless | `apps/headless/src/run.test.ts` | 12 | CLI arg parsing, simulation run, early stop, genotype ranking |
+
+**Total: 127 tests**, all passing.
+
+### Testing guidelines
+
+- Every new module **must** have a corresponding `*.test.ts` file
+- Tests should cover: happy path, edge cases, and invariant preservation
+- Simulation tests should use a minimal `testConfig()` (small world, few creatures) for speed
+- Use `resetInnovationCounter()` in `beforeEach` when testing DNA/brain creation
+- Prefer pure-function extraction for testability (e.g. geometry helpers, arg parsing)
+- Run `npm test` before merging any changes
 
 ---
 
