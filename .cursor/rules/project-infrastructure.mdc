@@ -20,11 +20,18 @@ living-bugs/
 ## Tech Stack
 
 - **Node.js** 22 (.nvmrc), **TypeScript** 5.x (strict), **Yarn** Classic 1.x
-- **sim-core**: pure TypeScript + Matter.js (physics). No browser APIs.
+- **sim-core**: pure TypeScript, custom kinematic physics + spatial hashing. No browser APIs.
 - **web**: Vite 5 + Pixi.js v7 + pixi-viewport + idb-keyval
 - **headless**: tsx for dev, tsc for build
 - **Tests**: Vitest 4 (config at root `vitest.config.ts`)
 - Root `tsconfig.json` is solution-style (references only, no compilerOptions)
+
+## Language Policy
+
+- **ALL source code MUST be written in TypeScript (`.ts` / `.tsx`)**. No `.js` / `.jsx` files in source directories.
+- Only exception: build output (`docs/assets/`), config files (`vite.config.ts` is already TS), and third-party generated files.
+- Use strict typing — avoid `any` where possible, prefer explicit interfaces and type aliases.
+- Use `as const` assertions for literal types when appropriate.
 
 ## Commands
 
@@ -38,8 +45,22 @@ yarn test                   # Run all unit tests
 yarn test:watch             # Tests in watch mode
 yarn test:coverage          # Tests with coverage
 yarn typecheck              # Type-check entire monorepo
-npx tsx apps/headless/src/main.ts  # Run headless directly (dev)
 ```
+
+### Training Pipeline
+
+```bash
+yarn train                  # Train 100K ticks with checkpoints → export best genotypes
+yarn train:short            # Train 20K ticks (quick iteration)
+yarn train:long             # Train 500K ticks (deep evolution)
+yarn pipeline               # Full pipeline: train → build:core → build:web
+yarn pipeline:short         # Short pipeline: train:short → build
+```
+
+- All `train` commands auto-resume from `checkpoint.json` if it exists
+- Best genotypes are exported to `configs/seed-genotypes.json` (bundled into web app)
+- Delete `checkpoint.json` to start training from scratch
+- Use `--seed configs/seed-genotypes.json` to start new population from trained genotypes
 
 ## Testing Requirements
 

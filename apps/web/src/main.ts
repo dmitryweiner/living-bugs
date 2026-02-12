@@ -1,5 +1,5 @@
 import { World, createDefaultDNA, PRNG } from '@living-bugs/sim-core';
-import type { WorldConfig, CreatureState, TickMetrics } from '@living-bugs/sim-core';
+import type { WorldConfig, CreatureState, TickMetrics, DNA } from '@living-bugs/sim-core';
 import { Renderer } from './renderer.js';
 import { saveSnapshot, loadSnapshot, clearSnapshot } from './storage.js';
 
@@ -296,6 +296,19 @@ async function init(): Promise<void> {
   const configModule = await import('../../../configs/world-config.json');
   const config: WorldConfig = configModule.default as WorldConfig;
 
+  // Load pre-trained seed genotypes (from headless training)
+  let seedGenotypes: DNA[] = [];
+  try {
+    const seedModule = await import('../../../configs/seed-genotypes.json');
+    const seedData = seedModule.default as { genotypes?: { dna: DNA }[] };
+    if (seedData.genotypes && Array.isArray(seedData.genotypes)) {
+      seedGenotypes = seedData.genotypes.map(g => g.dna);
+      console.log(`Loaded ${seedGenotypes.length} seed genotypes from headless training`);
+    }
+  } catch {
+    console.log('No seed genotypes found, using random DNA');
+  }
+
   // Create world
   world = new World(config);
 
@@ -307,8 +320,8 @@ async function init(): Promise<void> {
     world.food.clear();
     world.tick = 0;
     world.nextEntityId = 1;
-    world.initialize();
-    console.log('World reset to fresh state');
+    world.initialize(seedGenotypes);
+    console.log('World reset to fresh state (with seed genotypes)');
   };
 
   // ?reset in URL forces a fresh start (clears all saves)
@@ -334,14 +347,14 @@ async function init(): Promise<void> {
           localStorage.removeItem('living-bugs-emergency-save');
           console.log('Restored from emergency save');
         } catch {
-          world.initialize();
+          world.initialize(seedGenotypes);
         }
       } else {
-        world.initialize();
+        world.initialize(seedGenotypes);
       }
     }
   } else {
-    world.initialize();
+    world.initialize(seedGenotypes);
     // Remove ?reset from URL without reloading
     window.history.replaceState({}, '', window.location.pathname);
   }

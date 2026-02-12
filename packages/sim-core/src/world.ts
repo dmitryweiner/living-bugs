@@ -1,8 +1,8 @@
-import Matter from 'matter-js';
 import { PRNG } from './prng.js';
 import { createDefaultDNA, countSensorInputs, countActuatorOutputs, mutateDNA, resetInnovationCounter, getInnovationCounter } from './dna.js';
 import { buildBrainRuntime, brainForwardPass, hebbianUpdate, type BrainRuntime } from './brain.js';
 import { wrapPosition, torusDistance, circlesOverlap, rayCircleIntersect } from './geometry.js';
+import { SpatialHash } from './spatial-hash.js';
 import type {
   WorldConfig,
   CreatureState,
@@ -15,24 +15,20 @@ import type {
 } from './types.js';
 
 // ============================================================
-// Internal creature / food with Matter.js body
+// Internal creature / food state
 // ============================================================
 
 interface CreatureInternal {
   state: CreatureState;
-  body: Matter.Body;
   brainRuntime: BrainRuntime;
   lastEnergy: number; // for modulator computation
 }
 
 interface FoodInternal {
   state: FoodItemState;
-  body: Matter.Body;
 }
 
-// Collision categories
-const CATEGORY_CREATURE = 0x0001;
-const CATEGORY_FOOD = 0x0002;
+// (Matter.js removed — using pure kinematic simulation with spatial hash)
 
 // ============================================================
 // World class
@@ -43,9 +39,6 @@ export class World {
   rng: PRNG;
   tick: number = 0;
   nextEntityId: number = 1;
-
-  // Matter.js engine (no gravity, just collision detection)
-  engine: Matter.Engine;
 
   // Entity storage
   creatures: Map<number, CreatureInternal> = new Map();
@@ -61,30 +54,69 @@ export class World {
   // Brain tick counter
   private brainTickAccumulator = 0;
 
+  // Spatial hashes for fast neighbor queries
+  private creatureHash!: SpatialHash<CreatureState>;
+  private foodHash!: SpatialHash<FoodItemState>;
+  private readonly SPATIAL_CELL_SIZE = 100; // cells cover 100x100 units
+
   constructor(config: WorldConfig) {
     this.config = config;
     this.rng = new PRNG(config.simulation.seed);
 
-    // Create Matter.js engine with zero gravity
-    this.engine = Matter.Engine.create({
-      gravity: { x: 0, y: 0, scale: 0 },
-    });
+    // Init spatial hashes
+    this.rebuildSpatialHashes();
+  }
 
-    // Disable sleeping for simplicity
-    this.engine.enableSleeping = false;
+  private rebuildSpatialHashes(): void {
+    this.creatureHash = new SpatialHash<CreatureState>(
+      this.config.world.width, this.config.world.height, this.SPATIAL_CELL_SIZE,
+    );
+    this.foodHash = new SpatialHash<FoodItemState>(
+      this.config.world.width, this.config.world.height, this.SPATIAL_CELL_SIZE,
+    );
+  }
+
+  /** Rebuild spatial hashes from current entity positions. Call once per tick. */
+  private updateSpatialHashes(): void {
+    this.creatureHash.clear();
+    this.foodHash.clear();
+    for (const [, c] of this.creatures) {
+      this.creatureHash.insert(c.state);
+    }
+    for (const [, f] of this.food) {
+      this.foodHash.insert(f.state);
+    }
   }
 
   // ============================================================
   // Initialization
   // ============================================================
 
-  initialize(): void {
+  /**
+   * Initialize the world with creatures and food.
+   * @param seedGenotypes - Optional pre-trained DNA to seed creatures from.
+   *   If provided, creatures are spawned cycling through these genotypes
+   *   (with light mutation) instead of using random default DNA.
+   */
+  initialize(seedGenotypes?: DNA[]): void {
     const { initialCreatures } = this.config.simulation;
     const numGroups = 4;
 
     for (let i = 0; i < initialCreatures; i++) {
-      const groupId = i % numGroups;
-      const dna = createDefaultDNA(groupId, this.rng);
+      let dna: DNA;
+      if (seedGenotypes && seedGenotypes.length > 0) {
+        // Pick a seed genotype (cycle through), apply light mutation
+        const seed = seedGenotypes[i % seedGenotypes.length];
+        dna = mutateDNA(
+          seed,
+          this.config.reproduction.mutationRate * 0.5, // lighter mutation to preserve training
+          this.config.reproduction.mutationStrength * 0.5,
+          this.rng,
+        );
+      } else {
+        const groupId = i % numGroups;
+        dna = createDefaultDNA(groupId, this.rng);
+      }
       const pos: Vec2 = {
         x: this.rng.range(0, this.config.world.width),
         y: this.rng.range(0, this.config.world.height),
@@ -100,6 +132,9 @@ export class World {
         y: this.rng.range(0, this.config.world.height),
       });
     }
+
+    // Build initial spatial hashes
+    this.updateSpatialHashes();
   }
 
   // ============================================================
@@ -108,17 +143,6 @@ export class World {
 
   spawnCreature(dna: DNA, position: Vec2, angle: number, energy: number): number {
     const id = this.nextEntityId++;
-    const body = Matter.Bodies.circle(position.x, position.y, dna.body.radius, {
-      frictionAir: 0.1,
-      restitution: 0.3,
-      collisionFilter: {
-        category: CATEGORY_CREATURE,
-        mask: CATEGORY_CREATURE | CATEGORY_FOOD,
-      },
-      label: `creature_${id}`,
-    });
-    Matter.Body.setAngle(body, angle);
-    Matter.Composite.add(this.engine.world, body);
 
     const brainRuntime = buildBrainRuntime(dna.brain);
 
@@ -140,7 +164,7 @@ export class World {
       angularVelocity: 0,
     };
 
-    this.creatures.set(id, { state, body, brainRuntime, lastEnergy: energy });
+    this.creatures.set(id, { state, brainRuntime, lastEnergy: energy });
     this.events.push({ type: 'creature_born', tick: this.tick, creatureId: id, parentId: null });
     this.tickBirths++;
 
@@ -150,18 +174,9 @@ export class World {
   spawnFood(position: Vec2, nutrition?: number): number {
     const id = this.nextEntityId++;
     const n = nutrition ?? this.config.food.nutritionValue;
-    const body = Matter.Bodies.circle(position.x, position.y, this.config.food.radius, {
-      isStatic: true,
-      collisionFilter: {
-        category: CATEGORY_FOOD,
-        mask: CATEGORY_CREATURE,
-      },
-      label: `food_${id}`,
-    });
-    Matter.Composite.add(this.engine.world, body);
 
     const state: FoodItemState = { id, position: { ...position }, nutrition: n };
-    this.food.set(id, { state, body });
+    this.food.set(id, { state });
     this.events.push({ type: 'food_spawned', tick: this.tick, foodId: id });
 
     return id;
@@ -190,16 +205,12 @@ export class World {
       this.spawnFood(offset);
     }
 
-    Matter.Composite.remove(this.engine.world, c.body);
     this.creatures.delete(id);
     this.events.push({ type: 'creature_died', tick: this.tick, creatureId: id, cause });
     this.tickDeaths++;
   }
 
   private removeFood(id: number): void {
-    const f = this.food.get(id);
-    if (!f) return;
-    Matter.Composite.remove(this.engine.world, f.body);
     this.food.delete(id);
   }
 
@@ -248,12 +259,12 @@ export class World {
         creature.lastEnergy = s.energy;
       }
 
-      // Apply movement
+      // Apply kinematic movement
       const speed = s.velocity;
-      const dx = Math.cos(s.angle) * speed;
-      const dy = Math.sin(s.angle) * speed;
-      Matter.Body.setVelocity(creature.body, { x: dx, y: dy });
-      Matter.Body.setAngle(creature.body, s.angle + s.angularVelocity);
+      s.angle += s.angularVelocity;
+      s.position.x += Math.cos(s.angle) * speed;
+      s.position.y += Math.sin(s.angle) * speed;
+      wrapPosition(s.position, this.config.world.width, this.config.world.height);
 
       // Energy cost
       const rayCount = s.dna.sensors
@@ -284,17 +295,8 @@ export class World {
       }
     }
 
-    // 4. Physics step (capped at 16.667ms as Matter.js recommends)
-    Matter.Engine.update(this.engine, Math.min(16.667, 1000 / this.config.simulation.tickRate));
-
-    // 5. Sync positions from Matter.js back to state
-    for (const [, creature] of this.creatures) {
-      creature.state.position.x = creature.body.position.x;
-      creature.state.position.y = creature.body.position.y;
-      creature.state.angle = creature.body.angle;
-      wrapPosition(creature.state.position, this.config.world.width, this.config.world.height);
-      Matter.Body.setPosition(creature.body, creature.state.position);
-    }
+    // 4. Rebuild spatial hashes after positions are updated
+    this.updateSpatialHashes();
 
     // 6. Handle collisions (eating, attacking, donating)
     this.handleCollisions();
@@ -304,8 +306,9 @@ export class World {
       this.removeCreature(id, cause);
     }
 
-    // 8. Process reproduction
+    // 8. Process reproduction (enforce maxCreatures strictly)
     for (const parentId of toReproduce) {
+      if (this.creatures.size >= this.config.simulation.maxCreatures) break;
       this.reproduce(parentId);
     }
 
@@ -338,18 +341,20 @@ export class World {
             const rayAngle = startAngle + angleStep * r;
             const endX = s.position.x + Math.cos(rayAngle) * sensor.maxDistance;
             const endY = s.position.y + Math.sin(rayAngle) * sensor.maxDistance;
+            const rayEnd: Vec2 = { x: endX, y: endY };
 
-            // Simple raycasting: check against all nearby entities
+            // Simple raycasting: check against nearby entities via spatial hash
             let closestDist = 1.0;
             let hitFood = 0;
             let hitCreature = 0;
             let hitIFF = 0;
 
-            // Check food
-            for (const [, food] of this.food) {
+            // Check food (spatial hash query)
+            const nearbyFood = this.foodHash.queryRay(s.position, rayEnd, this.config.food.radius);
+            for (const foodState of nearbyFood) {
               const d = rayCircleIntersect(
-                s.position, { x: endX, y: endY },
-                food.state.position, this.config.food.radius
+                s.position, rayEnd,
+                foodState.position, this.config.food.radius
               );
               if (d !== null && d < closestDist) {
                 closestDist = d;
@@ -359,19 +364,20 @@ export class World {
               }
             }
 
-            // Check creatures
-            for (const [, other] of this.creatures) {
-              if (other.state.id === s.id) continue;
+            // Check creatures (spatial hash query)
+            const nearbyCreatures = this.creatureHash.queryRay(s.position, rayEnd, this.config.creatureDefaults.radius * 2);
+            for (const otherState of nearbyCreatures) {
+              if (otherState.id === s.id) continue;
               const d = rayCircleIntersect(
-                s.position, { x: endX, y: endY },
-                other.state.position, other.state.dna.body.radius
+                s.position, rayEnd,
+                otherState.position, otherState.dna.body.radius
               );
               if (d !== null && d < closestDist) {
                 closestDist = d;
                 hitFood = 0;
                 hitCreature = 1;
                 hitIFF = s.dna.hasIFF
-                  ? (other.state.dna.groupId === s.dna.groupId ? 1 : -1)
+                  ? (otherState.dna.groupId === s.dna.groupId ? 1 : -1)
                   : 0;
               }
             }
@@ -389,21 +395,23 @@ export class World {
           let touchCreature = 0;
           let touchIFF = 0;
 
-          // Check collisions with food
-          for (const [, food] of this.food) {
-            if (circlesOverlap(s.position, s.dna.body.radius, food.state.position, this.config.food.radius, this.config.world.width, this.config.world.height)) {
+          // Check collisions with food (spatial hash)
+          const touchFoodCandidates = this.foodHash.queryRadius(s.position, s.dna.body.radius + this.config.food.radius);
+          for (const foodState of touchFoodCandidates) {
+            if (circlesOverlap(s.position, s.dna.body.radius, foodState.position, this.config.food.radius, this.config.world.width, this.config.world.height)) {
               touchFood = 1;
               break;
             }
           }
 
-          // Check collisions with creatures
-          for (const [, other] of this.creatures) {
-            if (other.state.id === s.id) continue;
-            if (circlesOverlap(s.position, s.dna.body.radius, other.state.position, other.state.dna.body.radius, this.config.world.width, this.config.world.height)) {
+          // Check collisions with creatures (spatial hash)
+          const touchCreatureCandidates = this.creatureHash.queryRadius(s.position, s.dna.body.radius + this.config.creatureDefaults.radius * 2);
+          for (const otherState of touchCreatureCandidates) {
+            if (otherState.id === s.id) continue;
+            if (circlesOverlap(s.position, s.dna.body.radius, otherState.position, otherState.dna.body.radius, this.config.world.width, this.config.world.height)) {
               touchCreature = 1;
               touchIFF = s.dna.hasIFF
-                ? (other.state.dna.groupId === s.dna.groupId ? 1 : -1)
+                ? (otherState.dna.groupId === s.dna.groupId ? 1 : -1)
                 : 0;
               break;
             }
@@ -421,23 +429,25 @@ export class World {
         }
 
         case 'broadcastReceiver': {
+          const bcRadius = this.config.broadcast.broadcastRadius;
+          const nearbyBroadcasters = this.creatureHash.queryRadius(s.position, bcRadius);
           for (const ch of sensor.channels) {
             let bestStrength = 0;
             let bestDirection = 0;
 
-            for (const [, other] of this.creatures) {
-              if (other.state.id === s.id) continue;
-              if (!other.state.isBroadcasting) continue;
-              if (other.state.broadcastChannel !== ch) continue;
+            for (const otherState of nearbyBroadcasters) {
+              if (otherState.id === s.id) continue;
+              if (!otherState.isBroadcasting) continue;
+              if (otherState.broadcastChannel !== ch) continue;
 
-              const dist = torusDistance(s.position, other.state.position, this.config.world.width, this.config.world.height);
-              if (dist > this.config.broadcast.broadcastRadius) continue;
+              const dist = torusDistance(s.position, otherState.position, this.config.world.width, this.config.world.height);
+              if (dist > bcRadius) continue;
 
-              const strength = 1 - dist / this.config.broadcast.broadcastRadius;
+              const strength = 1 - dist / bcRadius;
               if (strength > bestStrength) {
                 bestStrength = strength;
-                const dx = other.state.position.x - s.position.x;
-                const dy = other.state.position.y - s.position.y;
+                const dx = otherState.position.x - s.position.x;
+                const dy = otherState.position.y - s.position.y;
                 const dirAngle = Math.atan2(dy, dx) - s.angle;
                 bestDirection = Math.max(-1, Math.min(1, dirAngle / Math.PI));
               }
@@ -503,60 +513,65 @@ export class World {
   private handleCollisions(): void {
     const cfg = this.config;
     const foodToRemove: number[] = [];
+    const eatRadius = cfg.creatureDefaults.radius * 2 + cfg.food.radius;
 
     for (const [, creature] of this.creatures) {
       const s = creature.state;
 
-      // Eating
+      // Eating — spatial hash query
       if (s.isEating) {
-        for (const [foodId, food] of this.food) {
-          if (circlesOverlap(s.position, s.dna.body.radius, food.state.position, cfg.food.radius, cfg.world.width, cfg.world.height)) {
-            s.energy = Math.min(cfg.energy.maxEnergy, s.energy + food.state.nutrition);
-            foodToRemove.push(foodId);
+        const nearbyFood = this.foodHash.queryRadius(s.position, eatRadius);
+        for (const foodState of nearbyFood) {
+          if (circlesOverlap(s.position, s.dna.body.radius, foodState.position, cfg.food.radius, cfg.world.width, cfg.world.height)) {
+            s.energy = Math.min(cfg.energy.maxEnergy, s.energy + foodState.nutrition);
+            foodToRemove.push(foodState.id);
             this.events.push({
               type: 'creature_ate', tick: this.tick,
-              creatureId: s.id, foodId, energyGained: food.state.nutrition,
+              creatureId: s.id, foodId: foodState.id, energyGained: foodState.nutrition,
             });
             break; // One food per tick
           }
         }
       }
 
-      // Attacking
+      // Attacking — spatial hash query
       if (s.isAttacking && s.attackCooldown <= 0) {
         s.energy -= cfg.energy.attackCost;
         s.attackCooldown = cfg.combat.attackCooldown;
 
-        for (const [, target] of this.creatures) {
-          if (target.state.id === s.id) continue;
-          const dist = torusDistance(s.position, target.state.position, cfg.world.width, cfg.world.height);
+        const nearbyTargets = this.creatureHash.queryRadius(s.position, cfg.combat.attackRadius);
+        for (const targetState of nearbyTargets) {
+          if (targetState.id === s.id) continue;
+          const dist = torusDistance(s.position, targetState.position, cfg.world.width, cfg.world.height);
           if (dist <= cfg.combat.attackRadius) {
             // IFF check
-            if (s.dna.hasIFF && target.state.dna.groupId === s.dna.groupId) continue;
-            target.state.energy -= cfg.combat.baseDamage;
+            if (s.dna.hasIFF && targetState.dna.groupId === s.dna.groupId) continue;
+            targetState.energy -= cfg.combat.baseDamage;
             this.events.push({
               type: 'creature_attacked', tick: this.tick,
-              attackerId: s.id, targetId: target.state.id, damage: cfg.combat.baseDamage,
+              attackerId: s.id, targetId: targetState.id, damage: cfg.combat.baseDamage,
             });
-            if (target.state.energy <= 0) {
-              this.removeCreature(target.state.id, 'killed');
+            if (targetState.energy <= 0) {
+              this.removeCreature(targetState.id, 'killed');
             }
           }
         }
       }
 
-      // Donating
+      // Donating — spatial hash query
       if (s.isDonating && s.dna.hasIFF) {
         let bestDist = cfg.donation.donateRadius;
         let bestTarget: CreatureInternal | null = null;
 
-        for (const [, other] of this.creatures) {
-          if (other.state.id === s.id) continue;
-          if (other.state.dna.groupId !== s.dna.groupId) continue;
-          const dist = torusDistance(s.position, other.state.position, cfg.world.width, cfg.world.height);
+        const nearbyAllies = this.creatureHash.queryRadius(s.position, cfg.donation.donateRadius);
+        for (const otherState of nearbyAllies) {
+          if (otherState.id === s.id) continue;
+          if (otherState.dna.groupId !== s.dna.groupId) continue;
+          const dist = torusDistance(s.position, otherState.position, cfg.world.width, cfg.world.height);
           if (dist < bestDist) {
             bestDist = dist;
-            bestTarget = other;
+            // Need the internal creature to modify energy
+            bestTarget = this.creatures.get(otherState.id) ?? null;
           }
         }
 
@@ -691,7 +706,6 @@ export class World {
 
   loadSnapshot(snapshot: WorldSnapshot): void {
     // Clear existing world
-    Matter.Composite.clear(this.engine.world, false);
     this.creatures.clear();
     this.food.clear();
 
@@ -717,6 +731,9 @@ export class World {
         internal.state.reproductionCooldown = c.reproductionCooldown;
       }
     }
+
+    // Rebuild spatial hashes after loading
+    this.updateSpatialHashes();
   }
 
   // ============================================================

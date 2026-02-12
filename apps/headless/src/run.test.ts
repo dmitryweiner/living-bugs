@@ -1,7 +1,21 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { World, resetInnovationCounter } from '@living-bugs/sim-core';
 import type { WorldConfig } from '@living-bugs/sim-core';
-import { parseArgs, runSimulation, rankGenotypes } from './run.js';
+import { parseArgs, runSimulation, rankGenotypes, type RunOptions } from './run.js';
+
+function defaultOpts(overrides: Partial<RunOptions> = {}): RunOptions {
+  return {
+    ticks: 3000,
+    logInterval: 100,
+    exportPath: null,
+    exportTopK: 20,
+    maxCreatures: null,
+    checkpointPath: null,
+    checkpointInterval: 10000,
+    seedGenotypesPath: null,
+    ...overrides,
+  };
+}
 
 function testConfig(): WorldConfig {
   return {
@@ -37,6 +51,10 @@ describe('headless runner', () => {
       expect(opts.logInterval).toBe(100);
       expect(opts.exportPath).toBeNull();
       expect(opts.exportTopK).toBe(20);
+      expect(opts.maxCreatures).toBeNull();
+      expect(opts.checkpointPath).toBeNull();
+      expect(opts.checkpointInterval).toBe(10000);
+      expect(opts.seedGenotypesPath).toBeNull();
     });
 
     it('parses --ticks', () => {
@@ -59,17 +77,41 @@ describe('headless runner', () => {
       expect(opts.exportTopK).toBe(5);
     });
 
+    it('parses --checkpoint', () => {
+      const opts = parseArgs(['--checkpoint', 'cp.json']);
+      expect(opts.checkpointPath).toBe('cp.json');
+    });
+
+    it('parses --checkpoint-interval', () => {
+      const opts = parseArgs(['--checkpoint-interval', '5000']);
+      expect(opts.checkpointInterval).toBe(5000);
+    });
+
+    it('parses --seed', () => {
+      const opts = parseArgs(['--seed', 'seed.json']);
+      expect(opts.seedGenotypesPath).toBe('seed.json');
+    });
+
+    it('parses --max-creatures', () => {
+      const opts = parseArgs(['--max-creatures', '200']);
+      expect(opts.maxCreatures).toBe(200);
+    });
+
     it('parses multiple flags', () => {
       const opts = parseArgs([
         '--ticks', '100',
         '--log-interval', '10',
         '--export', 'result.json',
         '--top-k', '3',
+        '--checkpoint', 'cp.json',
+        '--seed', 'seed.json',
       ]);
       expect(opts.ticks).toBe(100);
       expect(opts.logInterval).toBe(10);
       expect(opts.exportPath).toBe('result.json');
       expect(opts.exportTopK).toBe(3);
+      expect(opts.checkpointPath).toBe('cp.json');
+      expect(opts.seedGenotypesPath).toBe('seed.json');
     });
   });
 
@@ -77,23 +119,35 @@ describe('headless runner', () => {
     it('runs for the specified number of ticks', () => {
       const world = new World(testConfig());
       world.initialize();
-      const result = runSimulation(world, { ticks: 10, logInterval: 100, exportPath: null, exportTopK: 20 });
+      const result = runSimulation(world, defaultOpts({ ticks: 10 }));
       expect(result.finalMetrics).not.toBeNull();
       expect(result.finalMetrics!.tick).toBeGreaterThanOrEqual(1);
       expect(result.totalTimeMs).toBeGreaterThan(0);
     });
 
-    it('calls onTick callback at log interval', () => {
+    it('calls onLog callback at log interval', () => {
       const world = new World(testConfig());
       world.initialize();
       const ticks: number[] = [];
       runSimulation(
         world,
-        { ticks: 10, logInterval: 5, exportPath: null, exportTopK: 20 },
-        (metrics) => ticks.push(metrics.tick),
+        defaultOpts({ ticks: 10, logInterval: 5 }),
+        { onLog: (metrics) => ticks.push(metrics.tick) },
       );
       // Should have been called at tick 5 and tick 10
       expect(ticks.length).toBe(2);
+    });
+
+    it('calls onCheckpoint at checkpoint interval', () => {
+      const world = new World(testConfig());
+      world.initialize();
+      const checkpoints: number[] = [];
+      runSimulation(
+        world,
+        defaultOpts({ ticks: 30, checkpointPath: 'dummy', checkpointInterval: 10 }),
+        { onCheckpoint: (_w, ticksRun) => checkpoints.push(ticksRun) },
+      );
+      expect(checkpoints).toEqual([10, 20, 30]);
     });
 
     it('stops early when all creatures die', () => {
@@ -103,7 +157,7 @@ describe('headless runner', () => {
       cfg.food.spawnRate = 0;
       const world = new World(cfg);
       world.initialize();
-      const result = runSimulation(world, { ticks: 1000, logInterval: 100, exportPath: null, exportTopK: 20 });
+      const result = runSimulation(world, defaultOpts({ ticks: 1000 }));
       expect(result.stoppedEarly).toBe(true);
       expect(result.finalMetrics!.creatureCount).toBe(0);
     });

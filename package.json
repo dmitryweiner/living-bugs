@@ -14,7 +14,12 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "typecheck": "tsc --noEmit -p tsconfig.json"
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "train": "npx tsx apps/headless/src/main.ts --ticks 100000 --log-interval 10000 --max-creatures 300 --checkpoint checkpoint.json --checkpoint-interval 20000 --export configs/seed-genotypes.json --top-k 20",
+    "train:short": "npx tsx apps/headless/src/main.ts --ticks 20000 --log-interval 5000 --max-creatures 300 --checkpoint checkpoint.json --checkpoint-interval 10000 --export configs/seed-genotypes.json --top-k 20",
+    "train:long": "npx tsx apps/headless/src/main.ts --ticks 500000 --log-interval 50000 --max-creatures 300 --checkpoint checkpoint.json --checkpoint-interval 50000 --export configs/seed-genotypes.json --top-k 20",
+    "pipeline": "yarn train && yarn build:core && yarn build:web",
+    "pipeline:short": "yarn train:short && yarn build:core && yarn build:web"
   },
   "devDependencies": {
     "typescript": "^5.3.0",

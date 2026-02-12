@@ -5,3 +5,5 @@ dist/
 package-lock.json
 yarn-error.log
 .playwright-mcp/
+checkpoint.json
+best-genotypes.json

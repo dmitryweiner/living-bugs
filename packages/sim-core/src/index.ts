@@ -19,6 +19,7 @@ export {
   circlesOverlap,
   rayCircleIntersect,
 } from './geometry.js';
+export { SpatialHash } from './spatial-hash.js';
 export type {
   WorldConfig,
   DNA,

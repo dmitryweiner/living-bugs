@@ -14,11 +14,8 @@
     "build": "tsc -p tsconfig.json",
     "watch": "tsc -p tsconfig.json --watch"
   },
-  "dependencies": {
-    "matter-js": "^0.20.0"
-  },
+  "dependencies": {},
   "devDependencies": {
-    "@types/matter-js": "^0.19.7",
     "typescript": "^5.3.0"
   }
 }
