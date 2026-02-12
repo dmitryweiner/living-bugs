@@ -1,0 +1,23 @@
+{
+  "name": "living-bugs",
+  "private": true,
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces",
+    "build:core": "npm run build -w packages/sim-core",
+    "build:web": "npm run build -w apps/web",
+    "dev:web": "npm run dev -w apps/web",
+    "start:headless": "npm run start -w apps/headless",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.0",
+    "vitest": "^4.0.18"
+  }
+}

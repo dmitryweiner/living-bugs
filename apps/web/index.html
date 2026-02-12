@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Living Bugs</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; overflow: hidden; background: #0a0a0a; font-family: 'Segoe UI', system-ui, sans-serif; color: #e0e0e0; }
+    #app { width: 100%; height: 100%; display: flex; }
+    #canvas-container { flex: 1; position: relative; }
+    canvas { display: block; }
+
+    /* HUD overlay */
+    #hud {
+      position: absolute; top: 12px; left: 12px;
+      background: rgba(0,0,0,0.7); border: 1px solid #333; border-radius: 8px;
+      padding: 10px 14px; font-size: 13px; line-height: 1.6;
+      pointer-events: none; min-width: 220px;
+    }
+    #hud .label { color: #888; }
+    #hud .value { color: #4fc3f7; font-weight: 600; }
+
+    /* Controls bar */
+    #controls {
+      position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%);
+      background: rgba(0,0,0,0.8); border: 1px solid #333; border-radius: 8px;
+      padding: 8px 16px; display: flex; gap: 12px; align-items: center;
+    }
+    #controls button {
+      background: #1a1a2e; border: 1px solid #444; color: #e0e0e0; border-radius: 6px;
+      padding: 6px 14px; cursor: pointer; font-size: 13px; transition: background 0.15s;
+    }
+    #controls button:hover { background: #2a2a4e; }
+    #controls button.active { background: #1565c0; border-color: #42a5f5; }
+    #controls .speed-label { font-size: 12px; color: #888; }
+
+    /* Inspector panel */
+    #inspector {
+      width: 300px; background: #111; border-left: 1px solid #222;
+      padding: 16px; overflow-y: auto; display: none;
+    }
+    #inspector.open { display: block; }
+    #inspector h3 { margin-bottom: 10px; font-size: 15px; color: #4fc3f7; }
+    #inspector .field { margin-bottom: 6px; font-size: 13px; }
+    #inspector .field .label { color: #888; }
+    #inspector .field .value { color: #e0e0e0; }
+
+    /* Sandbox toolbar */
+    #sandbox-tools {
+      position: absolute; top: 12px; right: 12px;
+      background: rgba(0,0,0,0.7); border: 1px solid #333; border-radius: 8px;
+      padding: 10px; display: flex; flex-direction: column; gap: 6px;
+    }
+    #sandbox-tools button {
+      background: #1a1a2e; border: 1px solid #444; color: #e0e0e0; border-radius: 6px;
+      padding: 6px 12px; cursor: pointer; font-size: 12px; text-align: left;
+    }
+    #sandbox-tools button:hover { background: #2a2a4e; }
+    #sandbox-tools button.active { background: #1565c0; border-color: #42a5f5; }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <div id="canvas-container">
+      <div id="hud">
+        <div><span class="label">Tick: </span><span class="value" id="hud-tick">0</span></div>
+        <div><span class="label">Creatures: </span><span class="value" id="hud-creatures">0</span></div>
+        <div><span class="label">Food: </span><span class="value" id="hud-food">0</span></div>
+        <div><span class="label">Avg Energy: </span><span class="value" id="hud-energy">0</span></div>
+        <div><span class="label">Avg Age: </span><span class="value" id="hud-age">0</span></div>
+      </div>
+
+      <div id="sandbox-tools">
+        <button id="tool-none" class="active">Select</button>
+        <button id="tool-food">Place Food</button>
+        <button id="tool-creature">Place Creature</button>
+        <button id="tool-save">Save World</button>
+        <button id="tool-load">Load World</button>
+        <button id="tool-import">Import Genotypes</button>
+      </div>
+
+      <div id="controls">
+        <button id="btn-pause">Pause</button>
+        <button id="btn-speed1" class="active">1x</button>
+        <button id="btn-speed3">3x</button>
+        <button id="btn-speed10">10x</button>
+        <span class="speed-label">Speed</span>
+      </div>
+    </div>
+    <div id="inspector">
+      <h3>Creature Inspector</h3>
+      <div id="inspector-content">Click a creature to inspect</div>
+    </div>
+  </div>
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>

@@ -1,0 +1,60 @@
+{
+  "world": {
+    "width": 800,
+    "height": 800,
+    "boundary": "torus"
+  },
+  "simulation": {
+    "tickRate": 30,
+    "brainRate": 10,
+    "maxCreatures": 5000,
+    "initialCreatures": 100,
+    "seed": 42
+  },
+  "energy": {
+    "initialEnergy": 150,
+    "maxEnergy": 500,
+    "baseMetabolism": 0.05,
+    "moveCost": 0.02,
+    "turnCost": 0.01,
+    "attackCost": 2.0,
+    "visionCostPerRay": 0.005,
+    "broadcastCost": 0.03
+  },
+  "food": {
+    "spawnRate": 8,
+    "nutritionValue": 30,
+    "maxCount": 600,
+    "radius": 4
+  },
+  "combat": {
+    "baseDamage": 15,
+    "attackRadius": 10,
+    "attackCooldown": 5
+  },
+  "reproduction": {
+    "energyThreshold": 150,
+    "offspringEnergyShare": 0.4,
+    "mutationRate": 0.1,
+    "mutationStrength": 0.2,
+    "cooldown": 20
+  },
+  "death": {
+    "foodDropRatio": 0.5,
+    "foodDropMax": 5
+  },
+  "donation": {
+    "donateRadius": 15,
+    "donateAmount": 10,
+    "donateCost": 1.0
+  },
+  "broadcast": {
+    "broadcastRadius": 100,
+    "signalChannels": 4
+  },
+  "creatureDefaults": {
+    "radius": 5,
+    "maxSpeed": 2.0,
+    "maxTurnRate": 0.15
+  }
+}
