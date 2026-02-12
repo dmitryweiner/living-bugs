@@ -1,20 +1,20 @@
 {
   "world": {
-    "width": 800,
-    "height": 800,
+    "width": 2000,
+    "height": 2000,
     "boundary": "torus"
   },
   "simulation": {
     "tickRate": 30,
     "brainRate": 10,
-    "maxCreatures": 5000,
-    "initialCreatures": 100,
+    "maxCreatures": 1000,
+    "initialCreatures": 30,
     "seed": 42
   },
   "energy": {
-    "initialEnergy": 150,
+    "initialEnergy": 100,
     "maxEnergy": 500,
-    "baseMetabolism": 0.05,
+    "baseMetabolism": 0.12,
     "moveCost": 0.02,
     "turnCost": 0.01,
     "attackCost": 2.0,
@@ -22,9 +22,9 @@
     "broadcastCost": 0.03
   },
   "food": {
-    "spawnRate": 8,
+    "spawnRate": 5,
     "nutritionValue": 30,
-    "maxCount": 600,
+    "maxCount": 400,
     "radius": 4
   },
   "combat": {
@@ -33,11 +33,11 @@
     "attackCooldown": 5
   },
   "reproduction": {
-    "energyThreshold": 150,
+    "energyThreshold": 200,
     "offspringEnergyShare": 0.4,
     "mutationRate": 0.1,
     "mutationStrength": 0.2,
-    "cooldown": 20
+    "cooldown": 60
   },
   "death": {
     "foodDropRatio": 0.5,
