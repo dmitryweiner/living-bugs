@@ -176,6 +176,9 @@ export class Renderer {
   private panX = 0;
   private panY = 0;
 
+  /** When true, camera follows the selected creature each frame. */
+  private followMode = false;
+
   // Viewport bounds (in world coordinates)
   private viewportLeft = 0;
   private viewportTop = 0;
@@ -426,6 +429,7 @@ export class Renderer {
 
     canvas.addEventListener('wheel', (e: WheelEvent) => {
       e.preventDefault();
+      this.followMode = false;
       const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
       const oldZoom = this.zoom;
       this.zoom = Math.max(0.05, Math.min(20, this.zoom * zoomFactor));
@@ -458,6 +462,7 @@ export class Renderer {
       const totalDy = e.clientY - this.mouseDownPos.y;
       if (Math.abs(totalDx) > DRAG_THRESHOLD || Math.abs(totalDy) > DRAG_THRESHOLD) {
         this.didDrag = true;
+        this.followMode = false;
       }
     });
 
@@ -477,21 +482,30 @@ export class Renderer {
 
     // Touch support
     let lastTouches: { x: number; y: number }[] = [];
+    let lastTouchCount = 0;
 
     canvas.addEventListener('touchstart', (e: TouchEvent) => {
-      if (e.touches.length === 1) {
+      const count = e.touches.length;
+      if (count === 1) {
         this.isPanning = true;
         this.didDrag = false;
         const t = e.touches[0];
         this.lastMouse = { x: t.clientX, y: t.clientY };
         this.mouseDownPos = { x: t.clientX, y: t.clientY };
+      } else if (count === 2) {
+        // Transition 1→2: stop 1-finger pan, mark as drag (no click on release)
+        this.isPanning = false;
+        this.didDrag = true;
       }
       lastTouches = Array.from(e.touches).map(t => ({ x: t.clientX, y: t.clientY }));
+      lastTouchCount = count;
     }, { passive: true });
 
     canvas.addEventListener('touchmove', (e: TouchEvent) => {
       e.preventDefault();
-      if (e.touches.length === 1 && this.isPanning) {
+      const count = e.touches.length;
+
+      if (count === 1 && this.isPanning) {
         const t = e.touches[0];
         this.panX += t.clientX - this.lastMouse.x;
         this.panY += t.clientY - this.lastMouse.y;
@@ -501,29 +515,37 @@ export class Renderer {
         const totalDy = t.clientY - this.mouseDownPos.y;
         if (Math.abs(totalDx) > DRAG_THRESHOLD || Math.abs(totalDy) > DRAG_THRESHOLD) {
           this.didDrag = true;
+          this.followMode = false;
         }
-      } else if (e.touches.length === 2 && lastTouches.length === 2) {
+      } else if (count === 2) {
+        this.followMode = false;
         const cur = Array.from(e.touches).map(t => ({ x: t.clientX, y: t.clientY }));
-        const prevDist = Math.hypot(lastTouches[0].x - lastTouches[1].x, lastTouches[0].y - lastTouches[1].y);
-        const curDist = Math.hypot(cur[0].x - cur[1].x, cur[0].y - cur[1].y);
-        if (prevDist > 0) {
-          const factor = curDist / prevDist;
-          const oldZoom = this.zoom;
-          this.zoom = Math.max(0.05, Math.min(20, this.zoom * factor));
-          const rect = canvas.getBoundingClientRect();
-          const mx = (cur[0].x + cur[1].x) / 2 - rect.left;
-          const my = (cur[0].y + cur[1].y) / 2 - rect.top;
-          this.panX = mx - (mx - this.panX) * (this.zoom / oldZoom);
-          this.panY = my - (my - this.panY) * (this.zoom / oldZoom);
-          this.updateTransform();
+
+        // Only compute pinch if previous frame also had 2 touches
+        if (lastTouchCount === 2 && lastTouches.length === 2) {
+          const prevDist = Math.hypot(lastTouches[0].x - lastTouches[1].x, lastTouches[0].y - lastTouches[1].y);
+          const curDist = Math.hypot(cur[0].x - cur[1].x, cur[0].y - cur[1].y);
+          if (prevDist > 0) {
+            const factor = curDist / prevDist;
+            const oldZoom = this.zoom;
+            this.zoom = Math.max(0.05, Math.min(20, this.zoom * factor));
+            const rect = canvas.getBoundingClientRect();
+            const mx = (cur[0].x + cur[1].x) / 2 - rect.left;
+            const my = (cur[0].y + cur[1].y) / 2 - rect.top;
+            this.panX = mx - (mx - this.panX) * (this.zoom / oldZoom);
+            this.panY = my - (my - this.panY) * (this.zoom / oldZoom);
+            this.updateTransform();
+          }
         }
         lastTouches = cur;
+        lastTouchCount = 2;
         this.didDrag = true;
       }
     }, { passive: false });
 
     canvas.addEventListener('touchend', (e: TouchEvent) => {
-      if (e.touches.length === 0) {
+      const remaining = e.touches.length;
+      if (remaining === 0) {
         this.isPanning = false;
         if (!this.didDrag) {
           const rect = canvas.getBoundingClientRect();
@@ -531,8 +553,15 @@ export class Renderer {
           const worldY = (this.mouseDownPos.y - rect.top - this.panY) / this.zoom;
           this.onWorldClick?.(worldX, worldY);
         }
+      } else if (remaining === 1) {
+        // Transition 2→1: resync lastMouse to the remaining finger so no jump
+        const t = e.touches[0];
+        this.lastMouse = { x: t.clientX, y: t.clientY };
+        this.isPanning = true;
+        // Keep didDrag = true so lifting the last finger doesn't trigger a click
       }
       lastTouches = Array.from(e.touches).map(t => ({ x: t.clientX, y: t.clientY }));
+      lastTouchCount = remaining;
     });
   }
 
@@ -561,6 +590,29 @@ export class Renderer {
     this.panX = this.canvasWidth / 2 - worldX * this.zoom;
     this.panY = this.canvasHeight / 2 - worldY * this.zoom;
     this.updateTransform();
+  }
+
+  /** Enable/disable camera follow mode. */
+  setFollowMode(enabled: boolean): void {
+    this.followMode = enabled;
+  }
+
+  /** Whether camera is in follow mode. */
+  isFollowing(): boolean {
+    return this.followMode;
+  }
+
+  /** Convert world coordinates to screen (canvas) coordinates. */
+  worldToScreen(worldX: number, worldY: number): { x: number; y: number } {
+    return {
+      x: worldX * this.zoom + this.panX,
+      y: worldY * this.zoom + this.panY,
+    };
+  }
+
+  /** Get the current zoom level. */
+  getZoom(): number {
+    return this.zoom;
   }
 
   // ============================================================

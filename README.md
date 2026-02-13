@@ -55,11 +55,11 @@ yarn test
 
 ## Browser Controls
 
-- **Pan**: Shift+drag or middle-click drag
-- **Zoom**: Scroll wheel
-- **Inspect**: Click a creature to view its DNA, brain, energy, and actions
-- **Sandbox tools**: Place food, place creatures, save/load world, import genotypes
-- **Speed**: Pause, 1x, 3x, 10x
+- **Pan**: Drag or middle-click drag
+- **Zoom**: Scroll wheel (desktop), pinch (mobile)
+- **Inspect & follow**: Click a creature to select it — the camera enters follow mode (keeps the creature centered) and a floating inspector panel shows its DNA, brain, energy, and actions. Drag/zoom to exit follow mode; click × to close inspector.
+- **Sandbox tools** (collapsible): Place food, place creatures, save/load world, import genotypes, config editor, genotype browser, analytics, minimap
+- **Speed**: Pause, 0.1x, 1x, 10x
 
 ## Design Documents
 

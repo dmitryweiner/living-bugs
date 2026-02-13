@@ -42,6 +42,7 @@
 | `initialEnergy`     | number | 100    | Начальная энергия нового существа                |
 | `maxEnergy`         | number | 500    | Максимум энергии (больше не набирается)          |
 | `baseMetabolism`    | number | 0.1    | Базовый расход энергии за тик (просто за жизнь)  |
+| `densityMetabolismFactor` | number | 15 | Множитель плотностно-зависимого метаболизма (0 = отключено) |
 | `moveCost`          | number | 0.05   | Расход энергии за единицу скорости за тик        |
 | `turnCost`          | number | 0.02   | Расход энергии за поворот за тик                 |
 | `attackCost`        | number | 2.0    | Расход энергии за одну атаку                     |
@@ -51,12 +52,21 @@
 ### Формула расхода за тик
 
 ```
-cost = baseMetabolism
+densityRatio = currentCreatures / maxCreatures
+densityMultiplier = 1 + densityMetabolismFactor * densityRatio
+
+cost = baseMetabolism * densityMultiplier
      + moveCost * |velocity|
      + turnCost * |angularVelocity|
      + visionCostPerRay * numberOfRays
      + broadcastCost * (isBroadcasting ? 1 : 0)
 ```
+
+**Плотностно-зависимый метаболизм** — ключевой механизм саморегуляции популяции.
+Когда популяция растёт, `densityRatio` увеличивается, что повышает базовый метаболизм
+через `densityMultiplier`. Это создаёт отрицательную обратную связь: при высокой плотности
+существа расходуют больше энергии, что ограничивает рост и предотвращает перенаселение.
+При `densityMetabolismFactor = 0` механизм отключён (линейная зависимость).
 
 Существо с большим количеством сенсоров платит больше, что создаёт эволюционное давление
 на минимизацию органов чувств при сохранении функциональности.
@@ -233,6 +243,7 @@ cost = baseMetabolism
     "initialEnergy": 100,
     "maxEnergy": 500,
     "baseMetabolism": 0.1,
+    "densityMetabolismFactor": 15,
     "moveCost": 0.05,
     "turnCost": 0.02,
     "attackCost": 2.0,

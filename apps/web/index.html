@@ -35,12 +35,13 @@
     #controls button.active { background: #1565c0; border-color: #42a5f5; }
     #controls .speed-label { font-size: 12px; color: #888; }
 
-    /* Inspector panel — left middle overlay */
+    /* Inspector panel — floating under creature */
     #inspector {
-      position: absolute; top: 50%; left: 12px; transform: translateY(-50%);
+      position: absolute; top: 0; left: 0;
       background: rgba(10,10,10,0.92); border: 1px solid #333; border-radius: 8px;
-      padding: 0; width: 280px; max-height: 340px; overflow-y: auto;
+      padding: 0; width: 260px; max-height: 280px; overflow-y: auto;
       display: none; z-index: 10; font-size: 12px;
+      pointer-events: auto; transition: none;
     }
     #inspector.open { display: block; }
     #inspector-header {

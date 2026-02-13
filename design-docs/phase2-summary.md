@@ -2,10 +2,10 @@
 
 ## Overview
 
-Phase 2 implements the remaining stages from the project plan: **Stage C** (expression language for configurable world rules), **Stage F** (NEAT speciation, generational training, hall of fame), and **Stage G** (browser UX improvements including batch rendering, config editor, analytics, minimap, and genotype browser).
+Phase 2 implements the remaining stages from the project plan: **Stage C** (expression language for configurable world rules), **Stage F** (NEAT speciation, generational training, hall of fame), and **Stage G** (browser UX improvements including batch rendering, config editor, analytics, minimap, and genotype browser). Post-Phase 2 additions include density-dependent metabolism for population self-regulation, camera follow mode, floating inspector, mobile touch fixes, and UX polish.
 
-**Total new tests:** 44 (from 194 → 238)  
-**All 238 tests pass, all 3 projects type-check clean.**
+**Total new tests:** 52 (from 194 → 246)  
+**All 246 tests pass, all 3 projects type-check clean.**
 
 ---
 
@@ -113,7 +113,7 @@ Performance optimizations:
 - Sensor rays: only drawn for the selected creature
 - Sprite pool: pre-allocated and recycled (no per-frame allocation)
 
-New public methods: `getViewportBounds()`, `centerOn(worldX, worldY)`
+New public methods: `getViewportBounds()`, `centerOn(worldX, worldY)`, `worldToScreen(worldX, worldY)`, `getZoom()`, `setFollowMode(enabled)`, `isFollowing()`
 
 ### G2: Config Editor Panel
 
@@ -227,6 +227,76 @@ With Phase 2 complete, the simulation engine has:
 - Generational training with hall of fame
 - A performant renderer scaling to 10k+ creatures
 - A full sandbox UI with config editing, analytics, minimap, and genotype browsing
+
+---
+
+## Post-Phase 2 — Simulation Balancing & UX Polish
+
+### Density-Dependent Metabolism
+
+**Modified: `packages/sim-core/src/types.ts`, `packages/sim-core/src/world.ts`, `packages/sim-core/src/world.test.ts`**
+
+Added a new population self-regulation mechanic: `densityMetabolismFactor` in `WorldConfig.energy`. The effective base metabolism scales linearly with population density:
+
+```
+densityRatio = currentCreatures / maxCreatures
+effectiveMetabolism = baseMetabolism * (1 + densityMetabolismFactor * densityRatio)
+```
+
+This creates negative feedback — as population grows, creatures consume more energy, naturally capping the population below `maxCreatures` without hard limits. Set `densityMetabolismFactor = 0` to disable.
+
+The config editor UI (`apps/web/src/config-editor.ts`) includes a slider for this parameter (0–20, step 0.5).
+
+### Camera Follow Mode
+
+**Modified: `apps/web/src/renderer.ts`, `apps/web/src/main.ts`**
+
+Clicking a creature now enters **follow mode**: the camera centers on the selected creature every frame, tracking it as it moves. The creature inspector panel floats directly beneath the creature on screen (repositioned each frame via `worldToScreen()` coordinate conversion).
+
+New public methods on `Renderer`:
+- `setFollowMode(enabled)` — enable/disable camera tracking
+- `isFollowing()` — query follow state
+- `worldToScreen(worldX, worldY)` — convert world coordinates to canvas pixel coordinates
+- `getZoom()` — get current zoom level
+
+Follow mode is automatically exited when the user:
+- Drags the map (mouse or touch)
+- Scrolls the mouse wheel
+- Pinch-zooms on mobile
+- Clicks the close button on the inspector
+- The tracked creature dies
+
+### Floating Creature Inspector
+
+**Modified: `apps/web/index.html`, `apps/web/src/main.ts`**
+
+The inspector panel was moved from a fixed left-middle position to a floating overlay that follows the selected creature's screen position. It renders below the creature with automatic clamping to stay within viewport bounds (flips above the creature if bottom edge would be clipped).
+
+### Speed Controls Update
+
+**Modified: `apps/web/index.html`, `apps/web/src/main.ts`**
+
+Speed buttons changed from `1x / 3x / 10x` to `0.1x / 1x / 10x`. The 0.1x slow-motion mode uses a frame accumulator — the simulation only steps every 10th render frame, allowing careful observation of creature behavior.
+
+### Collapsible Sandbox Tools
+
+**Modified: `apps/web/index.html`, `apps/web/src/main.ts`**
+
+The right-side sandbox toolbar now has a "Tools ▲" toggle button. Clicking it collapses/expands the tool buttons, reducing screen clutter on smaller displays.
+
+### Mobile Pinch-Zoom Fix
+
+**Modified: `apps/web/src/renderer.ts`**
+
+Fixed a bug where pinch-zoom on mobile caused the map to jump sideways. The root cause was stale touch state during finger-count transitions:
+- **1→2 fingers**: `lastTouches` wasn't properly reset, causing the first pinch frame to compute a delta from the single-finger position
+- **2→1 fingers**: `lastMouse` wasn't resynced to the remaining finger, causing the next pan frame to jump from the old two-finger midpoint
+
+Fix: added `lastTouchCount` tracking so pinch calculations only run when both current and previous frames had 2 touches, and resync `lastMouse` to the remaining finger on 2→1 transition.
+
+---
+
+## What's Next
 
 Potential future work:
 - DSL expressions in `world-config.json` for formula-driven balancing

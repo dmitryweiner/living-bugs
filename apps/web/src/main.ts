@@ -102,6 +102,40 @@ function updateInspector(creature: CreatureState | null): void {
 }
 
 // ============================================================
+// Inspector positioning (floating under creature)
+// ============================================================
+
+function positionInspector(worldX: number, worldY: number, radius: number): void {
+  const panel = document.getElementById('inspector')!;
+  if (!panel.classList.contains('open')) return;
+
+  const screen = renderer.worldToScreen(worldX, worldY);
+  const container = document.getElementById('canvas-container')!;
+  const containerRect = container.getBoundingClientRect();
+  const panelW = panel.offsetWidth;
+  const panelH = panel.offsetHeight;
+
+  // Place below creature with a small gap
+  const gap = 12;
+  const screenRadius = radius * renderer.getZoom();
+  let x = screen.x - panelW / 2;
+  let y = screen.y + screenRadius + gap;
+
+  // Clamp to container bounds
+  x = Math.max(4, Math.min(x, containerRect.width - panelW - 4));
+  y = Math.max(4, Math.min(y, containerRect.height - panelH - 4));
+
+  // If below would go off-screen, place above
+  if (y + panelH > containerRect.height - 4) {
+    y = screen.y - screenRadius - gap - panelH;
+    y = Math.max(4, y);
+  }
+
+  panel.style.left = `${x}px`;
+  panel.style.top = `${y}px`;
+}
+
+// ============================================================
 // Controls setup
 // ============================================================
 
@@ -140,6 +174,7 @@ function setupControls(): void {
   inspectorClose.addEventListener('click', () => {
     selectedCreatureId = null;
     renderer.setSelectedCreature(null);
+    renderer.setFollowMode(false);
     updateInspector(null);
   });
 
@@ -218,6 +253,7 @@ function setupControls(): void {
     (window as any).__resetWorld();
     selectedCreatureId = null;
     renderer.setSelectedCreature(null);
+    renderer.setFollowMode(false);
     updateInspector(null);
   });
 
@@ -285,6 +321,11 @@ function handleWorldClick(worldX: number, worldY: number): void {
 
   selectedCreatureId = closest?.id ?? null;
   renderer.setSelectedCreature(selectedCreatureId);
+  if (closest) {
+    // Enter follow mode: camera will center on this creature each frame
+    renderer.setFollowMode(true);
+    renderer.centerOn(closest.position.x, closest.position.y);
+  }
   updateInspector(closest);
 }
 
@@ -327,15 +368,21 @@ function gameLoop(): void {
     minimap.draw(creatures, food, renderer.getViewportBounds(), obstacles);
   }
 
-  // Update selected creature inspector
+  // Update selected creature inspector + follow mode
   if (selectedCreatureId !== null) {
     const c = world.getCreatureById(selectedCreatureId);
     if (c) {
+      // Follow mode: keep camera centered on creature
+      if (renderer.isFollowing()) {
+        renderer.centerOn(c.position.x, c.position.y);
+      }
       updateInspector(c);
+      positionInspector(c.position.x, c.position.y, c.dna.body.radius);
     } else {
       // Creature died
       selectedCreatureId = null;
       renderer.setSelectedCreature(null);
+      renderer.setFollowMode(false);
       updateInspector(null);
     }
   }
