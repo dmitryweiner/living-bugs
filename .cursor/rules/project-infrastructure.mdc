@@ -87,4 +87,5 @@ yarn pipeline:short         # Short pipeline: train:short → build
 - All packages use `"type": "module"` — use `.js` extensions in relative imports
 - World simulation is deterministic: same PRNG seed + config → same result
 - `configs/world-config.json` is the single source of runtime parameters
+- **Exported genotypes MUST go to `configs/seed-genotypes.json`** — this is the only path the web app imports. Never export to the repo root. All `yarn train*` scripts already use `--export configs/seed-genotypes.json`.
 - Web build goes to `/docs` (not `dist`) for GitHub Pages; `design-docs/` holds documentation

@@ -7,3 +7,4 @@ yarn-error.log
 .playwright-mcp/
 checkpoint.json
 best-genotypes.json
+best_genotypes.json

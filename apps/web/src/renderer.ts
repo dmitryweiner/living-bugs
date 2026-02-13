@@ -661,7 +661,7 @@ export class Renderer {
       const sprite = this.fastCreatureSprites[i];
       sprite.visible = true;
       sprite.position.set(c.position.x, c.position.y);
-      const scale = (c.dna.body.radius * 2) / 32; // circleTexture is 32px diameter
+      const scale = (c.dna.body.radius * 4) / 32; // circleTexture is 32px diameter, 2x visual size
       sprite.scale.set(scale);
       sprite.tint = c.id === this.selectedCreatureId
         ? SELECTED_TINT
@@ -755,7 +755,7 @@ export class Renderer {
       }
 
       const sprite = entry.sprite;
-      const desiredSize = c.dna.body.radius * 2.5;
+      const desiredSize = c.dna.body.radius * 5;
       sprite.width = desiredSize;
       sprite.height = desiredSize;
       sprite.position.set(c.position.x, c.position.y);
