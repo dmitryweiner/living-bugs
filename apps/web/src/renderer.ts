@@ -58,6 +58,35 @@ const OBSTACLE_EMOJIS = [
 
 const OBSTACLE_COLOR = 0x795548; // brown for fast mode
 
+/**
+ * Hash a creature's DNA properties to a hue offset for visual species diversity.
+ * Similar genomes produce similar colors.
+ */
+function dnaHueHash(c: CreatureState): number {
+  const brain = c.dna.brain;
+  const nodeCount = brain.nodeGenes.length;
+  const connCount = brain.connectionGenes.length;
+  const sensorCount = c.dna.sensors.length;
+  const actuatorCount = c.dna.actuators.length;
+  const radiusBucket = Math.round(c.dna.body.radius * 2);
+  // Simple hash → 0..360 hue
+  const hash = (nodeCount * 7 + connCount * 13 + sensorCount * 31 + actuatorCount * 53 + radiusBucket * 97) % 360;
+  return hash;
+}
+
+/** Convert HSL (h=0..360, s=0..1, l=0..1) to RGB hex number. */
+function hslToHex(h: number, s: number, l: number): number {
+  const a = s * Math.min(l, 1 - l);
+  const f = (n: number) => {
+    const k = (n + h / 30) % 12;
+    return l - a * Math.max(-1, Math.min(Math.min(k - 3, 9 - k), 1));
+  };
+  const r = Math.round(f(0) * 255);
+  const g = Math.round(f(8) * 255);
+  const b = Math.round(f(4) * 255);
+  return (r << 16) | (g << 8) | b;
+}
+
 /** Distinct group colors for fast (dot) mode. */
 const GROUP_COLORS = [
   0xf44336, // red
@@ -762,7 +791,13 @@ export class Renderer {
       sprite.rotation = c.angle;
 
       const isSelected = c.id === this.selectedCreatureId;
-      sprite.tint = isSelected ? SELECTED_TINT : 0xffffff;
+      if (isSelected) {
+        sprite.tint = SELECTED_TINT;
+      } else {
+        // Species-colored tint: hash DNA properties to a hue
+        const hue = dnaHueHash(c);
+        sprite.tint = hslToHex(hue, 0.3, 0.85);
+      }
       sprite.alpha = isSelected ? 1 : 0.9;
     }
 

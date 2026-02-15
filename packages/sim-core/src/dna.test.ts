@@ -6,6 +6,8 @@ import {
   createMinimalBrain,
   createDefaultDNA,
   mutateDNA,
+  crossoverBrain,
+  crossoverDNA,
   resetInnovationCounter,
 } from './dna.js';
 import type { SensorGene, ActuatorGene, DNA, BrainGenome } from './types.js';
@@ -314,6 +316,198 @@ describe('DNA', () => {
       expect(restored.groupId).toBe(dna.groupId);
       expect(restored.sensors.length).toBe(dna.sensors.length);
       expect(restored.brain.nodeGenes.length).toBe(dna.brain.nodeGenes.length);
+    });
+  });
+
+  describe('crossoverBrain', () => {
+    it('produces a valid brain genome with matching genes from both parents', () => {
+      const rng = new PRNG(42);
+      const sensors: SensorGene[] = [{ type: 'energySense' }];
+      const actuators: ActuatorGene[] = [{ type: 'move' }];
+      const brain1 = createMinimalBrain(sensors, actuators, rng);
+      const brain2 = createMinimalBrain(sensors, actuators, rng);
+
+      const child = crossoverBrain(brain1, brain2, 10, 5, rng);
+
+      expect(child.nodeGenes.length).toBeGreaterThan(0);
+      expect(child.connectionGenes.length).toBeGreaterThan(0);
+      expect(child.plasticityRate).toBeGreaterThanOrEqual(0);
+    });
+
+    it('inherits disjoint genes from fitter parent only', () => {
+      const rng = new PRNG(42);
+      const sensors: SensorGene[] = [{ type: 'energySense' }];
+      const actuators: ActuatorGene[] = [{ type: 'move' }];
+      const brain1 = createMinimalBrain(sensors, actuators, rng);
+      // Mutate brain1 to add unique connections
+      let dna1: DNA = { groupId: 0, hasIFF: false, body: { radius: 5 }, sensors, actuators, brain: brain1 };
+      for (let i = 0; i < 10; i++) {
+        dna1 = mutateDNA(dna1, 1.0, 0.5, rng);
+      }
+      const brain2 = createMinimalBrain(sensors, actuators, rng);
+
+      // brain1 has extra innovations (disjoint/excess)
+      const child = crossoverBrain(dna1.brain, brain2, 100, 1, rng);
+
+      // Child should have innovations from fitter parent (dna1.brain)
+      const fitterInnovations = new Set(dna1.brain.connectionGenes.map(c => c.innovationNumber));
+      for (const conn of child.connectionGenes) {
+        expect(fitterInnovations.has(conn.innovationNumber) ||
+          brain2.connectionGenes.some(c => c.innovationNumber === conn.innovationNumber)
+        ).toBe(true);
+      }
+    });
+
+    it('with equal fitness, may include disjoint genes from both parents', () => {
+      const rng = new PRNG(42);
+      const sensors: SensorGene[] = [{ type: 'energySense' }];
+      const actuators: ActuatorGene[] = [{ type: 'move' }];
+      const brain1 = createMinimalBrain(sensors, actuators, rng);
+      let dna1: DNA = { groupId: 0, hasIFF: false, body: { radius: 5 }, sensors, actuators, brain: brain1 };
+      for (let i = 0; i < 5; i++) {
+        dna1 = mutateDNA(dna1, 1.0, 0.5, rng);
+      }
+      const brain2 = createMinimalBrain(sensors, actuators, rng);
+      let dna2: DNA = { groupId: 0, hasIFF: false, body: { radius: 5 }, sensors, actuators, brain: brain2 };
+      for (let i = 0; i < 5; i++) {
+        dna2 = mutateDNA(dna2, 1.0, 0.5, rng);
+      }
+
+      // Equal fitness → disjoint from both parents can appear
+      const child = crossoverBrain(dna1.brain, dna2.brain, 10, 10, rng);
+      expect(child.connectionGenes.length).toBeGreaterThan(0);
+    });
+
+    it('disabled gene from either parent has 75% chance of staying disabled', () => {
+      const rng = new PRNG(99);
+      const sensors: SensorGene[] = [{ type: 'energySense' }];
+      const actuators: ActuatorGene[] = [{ type: 'move' }];
+      const brain1 = createMinimalBrain(sensors, actuators, rng);
+      const brain2 = createMinimalBrain(sensors, actuators, rng);
+
+      // Disable a matching gene in parent 1
+      if (brain1.connectionGenes.length > 0) {
+        brain1.connectionGenes[0].enabled = false;
+      }
+
+      // Run many trials and check disabled rate
+      let disabledCount = 0;
+      const trials = 100;
+      for (let t = 0; t < trials; t++) {
+        const child = crossoverBrain(brain1, brain2, 10, 5, new PRNG(t));
+        const matchingInn = brain1.connectionGenes[0]?.innovationNumber;
+        const childGene = child.connectionGenes.find(c => c.innovationNumber === matchingInn);
+        if (childGene && !childGene.enabled) disabledCount++;
+      }
+      // Expect ~75% disabled (allow 55%-95% range for statistical tolerance)
+      expect(disabledCount).toBeGreaterThan(trials * 0.55);
+      expect(disabledCount).toBeLessThan(trials * 0.95);
+    });
+
+    it('all connections reference existing nodes', () => {
+      const rng = new PRNG(42);
+      const sensors: SensorGene[] = [
+        { type: 'rayVision', rayCount: 2, fov: 1, maxDistance: 30, offsetAngle: 0 },
+        { type: 'energySense' },
+      ];
+      const actuators: ActuatorGene[] = [{ type: 'move' }, { type: 'eat' }];
+      let dna1: DNA = { groupId: 0, hasIFF: false, body: { radius: 5 }, sensors, actuators, brain: createMinimalBrain(sensors, actuators, rng) };
+      let dna2: DNA = { groupId: 0, hasIFF: false, body: { radius: 5 }, sensors, actuators, brain: createMinimalBrain(sensors, actuators, rng) };
+      for (let i = 0; i < 10; i++) {
+        dna1 = mutateDNA(dna1, 0.8, 0.5, rng);
+        dna2 = mutateDNA(dna2, 0.8, 0.5, rng);
+      }
+
+      const child = crossoverBrain(dna1.brain, dna2.brain, 10, 8, rng);
+      const nodeIds = new Set(child.nodeGenes.map(n => n.id));
+      for (const conn of child.connectionGenes) {
+        expect(nodeIds.has(conn.fromNode)).toBe(true);
+        expect(nodeIds.has(conn.toNode)).toBe(true);
+      }
+    });
+  });
+
+  describe('crossoverDNA', () => {
+    it('produces a valid DNA with reconciled brain I/O', () => {
+      const rng = new PRNG(42);
+      const dna1 = createDefaultDNA(0, rng);
+      const dna2 = createDefaultDNA(0, rng);
+
+      const child = crossoverDNA(dna1, dna2, 10, 5, rng);
+
+      const expectedInputs = countSensorInputs(child.sensors);
+      const expectedOutputs = countActuatorOutputs(child.actuators);
+      const inputs = child.brain.nodeGenes.filter(n => n.type === 'input').length;
+      const outputs = child.brain.nodeGenes.filter(n => n.type === 'output').length;
+      expect(inputs).toBe(expectedInputs);
+      expect(outputs).toBe(expectedOutputs);
+    });
+
+    it('child body radius is average of parents', () => {
+      const rng = new PRNG(42);
+      const dna1 = createDefaultDNA(0, rng);
+      dna1.body.radius = 4;
+      const dna2 = createDefaultDNA(0, rng);
+      dna2.body.radius = 8;
+
+      const child = crossoverDNA(dna1, dna2, 10, 5, rng);
+      expect(child.body.radius).toBe(6);
+    });
+
+    it('child groupId comes from fitter parent', () => {
+      const rng = new PRNG(42);
+      const dna1 = createDefaultDNA(1, rng);
+      const dna2 = createDefaultDNA(2, rng);
+
+      const child = crossoverDNA(dna1, dna2, 100, 5, rng);
+      expect(child.groupId).toBe(1); // dna1 is fitter
+    });
+
+    it('always has energySense sensor and move actuator', () => {
+      const rng = new PRNG(42);
+      for (let trial = 0; trial < 20; trial++) {
+        const dna1 = createDefaultDNA(0, new PRNG(trial));
+        const dna2 = createDefaultDNA(0, new PRNG(trial + 100));
+        const child = crossoverDNA(dna1, dna2, 10, 10, new PRNG(trial + 200));
+        expect(child.sensors.some(s => s.type === 'energySense')).toBe(true);
+        expect(child.actuators.some(a => a.type === 'move')).toBe(true);
+      }
+    });
+
+    it('child is JSON-serializable', () => {
+      const rng = new PRNG(42);
+      const dna1 = createDefaultDNA(0, rng);
+      const dna2 = createDefaultDNA(0, rng);
+      const child = crossoverDNA(dna1, dna2, 10, 5, rng);
+
+      const json = JSON.stringify(child);
+      const restored = JSON.parse(json) as DNA;
+      expect(restored.groupId).toBe(child.groupId);
+      expect(restored.sensors.length).toBe(child.sensors.length);
+    });
+
+    it('crossover + mutation produces valid DNA over many iterations', () => {
+      const rng = new PRNG(42);
+      let dna1 = createDefaultDNA(0, rng);
+      let dna2 = createDefaultDNA(0, rng);
+
+      for (let i = 0; i < 50; i++) {
+        const child = crossoverDNA(dna1, dna2, rng.range(1, 20), rng.range(1, 20), rng);
+        const mutated = mutateDNA(child, 0.3, 0.3, rng);
+        // Verify invariants
+        const expectedInputs = countSensorInputs(mutated.sensors);
+        const expectedOutputs = countActuatorOutputs(mutated.actuators);
+        const inputs = mutated.brain.nodeGenes.filter(n => n.type === 'input').length;
+        const outputs = mutated.brain.nodeGenes.filter(n => n.type === 'output').length;
+        expect(inputs).toBe(expectedInputs);
+        expect(outputs).toBe(expectedOutputs);
+        expect(mutated.body.radius).toBeGreaterThanOrEqual(3);
+        expect(mutated.body.radius).toBeLessThanOrEqual(10);
+
+        // Evolve parents
+        dna1 = mutated;
+        dna2 = mutateDNA(dna2, 0.3, 0.3, rng);
+      }
     });
   });
 });

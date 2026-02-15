@@ -35,6 +35,7 @@ function testConfig(): WorldConfig {
     reproduction: {
       energyThreshold: 120, offspringEnergyShare: 0.4,
       mutationRate: 0.1, mutationStrength: 0.2, cooldown: 20,
+      crossoverRate: 0,
     },
     death: { foodDropRatio: 0.5, foodDropMax: 3 },
     donation: { donateRadius: 15, donateAmount: 10, donateCost: 1.0 },

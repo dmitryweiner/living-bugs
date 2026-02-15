@@ -432,12 +432,14 @@ async function init(): Promise<void> {
 
   // Load pre-trained seed genotypes (from headless training)
   let seedGenotypes: DNA[] = [];
+  let seedHofData: { dna: DNA; fitness?: number }[] = [];
   try {
     const seedModule = await import('../../../configs/seed-genotypes.json');
-    const seedData = seedModule.default as { genotypes?: { dna: DNA }[] };
+    const seedData = seedModule.default as { genotypes?: { dna: DNA; fitness?: number }[] };
     if (seedData.genotypes && Array.isArray(seedData.genotypes)) {
       seedGenotypes = seedData.genotypes.map(g => g.dna);
       seedGenotypesGlobal = seedGenotypes;
+      seedHofData = seedData.genotypes.map(g => ({ dna: g.dna, fitness: g.fitness }));
       console.log(`Loaded ${seedGenotypes.length} seed genotypes from headless training`);
     }
   } catch {
@@ -517,6 +519,9 @@ async function init(): Promise<void> {
   // Create genotype browser
   genotypeBrowser = new GenotypeBrowser();
   genotypeBrowser.mount(container);
+  if (seedHofData.length > 0) {
+    genotypeBrowser.setHallOfFame(seedHofData);
+  }
   genotypeBrowser.onSpawn = (dna) => {
     const rng = new PRNG(Date.now());
     world.spawnCreature(

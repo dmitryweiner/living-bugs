@@ -16,9 +16,9 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "train": "npx tsx apps/headless/src/main.ts --ticks 100000 --log-interval 10000 --max-creatures 300 --checkpoint checkpoint.json --checkpoint-interval 20000 --export configs/seed-genotypes.json --top-k 20",
-    "train:short": "npx tsx apps/headless/src/main.ts --ticks 20000 --log-interval 5000 --max-creatures 300 --checkpoint checkpoint.json --checkpoint-interval 10000 --export configs/seed-genotypes.json --top-k 20",
-    "train:long": "npx tsx apps/headless/src/main.ts --ticks 500000 --log-interval 50000 --max-creatures 300 --checkpoint checkpoint.json --checkpoint-interval 50000 --export configs/seed-genotypes.json --top-k 20",
+    "train": "npx tsx apps/headless/src/main.ts --mode generational --generations 100 --gen-ticks 1000 --max-creatures 300 --seed configs/seed-genotypes.json --export configs/seed-genotypes.json --top-k 20",
+    "train:short": "npx tsx apps/headless/src/main.ts --mode generational --generations 20 --gen-ticks 500 --max-creatures 300 --seed configs/seed-genotypes.json --export configs/seed-genotypes.json --top-k 20",
+    "train:long": "npx tsx apps/headless/src/main.ts --mode generational --generations 500 --gen-ticks 2000 --max-creatures 300 --seed configs/seed-genotypes.json --export configs/seed-genotypes.json --top-k 20",
     "pipeline": "yarn train && yarn build:core && yarn build:web",
     "pipeline:short": "yarn train:short && yarn build:core && yarn build:web"
   },

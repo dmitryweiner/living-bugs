@@ -1,6 +1,7 @@
 import {
   World,
   mutateDNA,
+  crossoverDNA,
   PRNG,
   assignSpecies,
   computeAdjustedFitness,
@@ -364,18 +365,63 @@ export function runGenerational(
     const topCount = Math.max(2, Math.ceil(sortedCreatures.length * 0.3));
     const topCreatures = sortedCreatures.slice(0, topCount);
 
-    // 5. Clone with mutation to fill population
+    // 5. Create next generation: crossover + mutation
     const targetPop = config.simulation.initialCreatures;
     const nextGenGenotypes: DNA[] = [];
+    const crossoverRate = config.reproduction.crossoverRate ?? 0;
+
     for (let i = 0; i < targetPop; i++) {
       const parent = topCreatures[i % topCreatures.length];
-      const child = mutateDNA(
-        parent.dna,
+      let childDNA: DNA;
+
+      // Attempt crossover with another top performer
+      if (crossoverRate > 0 && rng.chance(crossoverRate) && topCreatures.length >= 2) {
+        // Pick a different parent from the same species (or random top creature)
+        const parentSpecies = species.find(sp =>
+          sp.members.includes(parent.creatureId)
+        );
+        let mate: CreatureFitness | null = null;
+
+        if (parentSpecies && parentSpecies.members.length >= 2) {
+          // Pick mate from same species
+          const sameSpecies = topCreatures.filter(
+            tc => tc.creatureId !== parent.creatureId &&
+              parentSpecies.members.includes(tc.creatureId)
+          );
+          if (sameSpecies.length > 0) {
+            mate = sameSpecies[rng.int(0, sameSpecies.length - 1)];
+          }
+        }
+
+        // Fall back to random different top creature
+        if (!mate) {
+          const others = topCreatures.filter(tc => tc.creatureId !== parent.creatureId);
+          if (others.length > 0) {
+            mate = others[rng.int(0, others.length - 1)];
+          }
+        }
+
+        if (mate) {
+          childDNA = crossoverDNA(
+            parent.dna, mate.dna,
+            parent.fitness, mate.fitness,
+            rng,
+          );
+        } else {
+          childDNA = JSON.parse(JSON.stringify(parent.dna));
+        }
+      } else {
+        childDNA = JSON.parse(JSON.stringify(parent.dna));
+      }
+
+      // Apply mutation
+      childDNA = mutateDNA(
+        childDNA,
         config.reproduction.mutationRate,
         config.reproduction.mutationStrength,
         rng,
       );
-      nextGenGenotypes.push(child);
+      nextGenGenotypes.push(childDNA);
     }
 
     currentGenotypes = nextGenGenotypes;

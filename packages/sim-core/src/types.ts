@@ -52,6 +52,8 @@ export interface WorldConfig {
     mutationRate: number;
     mutationStrength: number;
     cooldown: number;
+    /** Probability of sexual reproduction (crossover) when a mate is nearby. 0 = always asexual. */
+    crossoverRate: number;
   };
   death: {
     foodDropRatio: number;
@@ -203,6 +205,8 @@ export interface CreatureState {
   isEating: boolean;
   velocity: number;    // current speed scalar
   angularVelocity: number; // current turn rate
+  /** Runtime brain weights (Hebbian-modified). Present in snapshots for persistence. */
+  runtimeWeights?: number[];
 }
 
 export interface FoodItemState {

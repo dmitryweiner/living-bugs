@@ -3,6 +3,8 @@ export { PRNG } from './prng.js';
 export {
   createDefaultDNA,
   mutateDNA,
+  crossoverBrain,
+  crossoverDNA,
   countSensorInputs,
   countActuatorOutputs,
   resetInnovationCounter,
@@ -12,6 +14,8 @@ export {
   buildBrainRuntime,
   brainForwardPass,
   hebbianUpdate,
+  exportWeights,
+  importWeights,
 } from './brain.js';
 export {
   wrapPosition,

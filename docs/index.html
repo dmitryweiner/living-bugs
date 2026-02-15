@@ -202,8 +202,29 @@
     .compare-table th { color: #4fc3f7; text-align: left; padding: 4px 6px; border-bottom: 1px solid #333; }
     .compare-table td { padding: 3px 6px; border-bottom: 1px solid #1a1a1a; color: #ccc; }
     .compare-table td:first-child { color: #888; }
+
+    /* Genotype Browser Tabs */
+    .genotype-tabs {
+      display: flex; gap: 0; border-bottom: 1px solid #333;
+      padding: 0 10px;
+    }
+    .genotype-tab {
+      background: none; border: none; border-bottom: 2px solid transparent;
+      color: #888; cursor: pointer; font-size: 11px; padding: 6px 10px;
+      transition: color 0.15s, border-color 0.15s;
+    }
+    .genotype-tab:hover { color: #ccc; }
+    .genotype-tab.active { color: #4fc3f7; border-bottom-color: #4fc3f7; }
+
+    /* Brain Graph Canvas */
+    .brain-graph-canvas {
+      width: 100%; height: 220px;
+      border-bottom: 1px solid #333;
+      display: none;
+    }
+    .genotype-actions { display: flex; gap: 4px; }
   </style>
-  <script type="module" crossorigin src="./assets/index-DqbPpwYX.js"></script>
+  <script type="module" crossorigin src="./assets/index-BfI9U8DT.js"></script>
 </head>
 <body>
   <div id="app">

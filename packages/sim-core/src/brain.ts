@@ -221,6 +221,22 @@ export function brainForwardPass(
 }
 
 // ============================================================
+// Runtime weight export / import (for snapshot persistence)
+// ============================================================
+
+/** Export current runtime weights as a plain number array. */
+export function exportWeights(rt: BrainRuntime): number[] {
+  return Array.from(rt.connWeight);
+}
+
+/** Import runtime weights from a plain number array. */
+export function importWeights(rt: BrainRuntime, weights: number[]): void {
+  for (let i = 0; i < rt.connCount && i < weights.length; i++) {
+    rt.connWeight[i] = weights[i];
+  }
+}
+
+// ============================================================
 // Hebbian plasticity update
 // ============================================================
 

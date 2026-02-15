@@ -16,9 +16,17 @@
     "maxEnergy": 400,
     "baseMetabolism": 0.08,
     "densityMetabolismFactor": 15,
-    "moveCost": 0.02,
+    "moveCost": {
+      "op": "mul",
+      "a": 0.02,
+      "b": { "op": "pow", "base": { "op": "div", "a": { "op": "var", "name": "creature.radius" }, "b": 5 }, "exp": 2 }
+    },
     "turnCost": 0.01,
-    "attackCost": 2.0,
+    "attackCost": {
+      "op": "mul",
+      "a": 2.0,
+      "b": { "op": "div", "a": { "op": "var", "name": "creature.radius" }, "b": 5 }
+    },
     "visionCostPerRay": 0.005,
     "broadcastCost": 0.03
   },
@@ -29,7 +37,11 @@
     "radius": 4
   },
   "combat": {
-    "baseDamage": 15,
+    "baseDamage": {
+      "op": "mul",
+      "a": 15,
+      "b": { "op": "div", "a": { "op": "var", "name": "creature.radius" }, "b": 5 }
+    },
     "attackRadius": 10,
     "attackCooldown": 5
   },
@@ -38,7 +50,8 @@
     "offspringEnergyShare": 0.4,
     "mutationRate": 0.15,
     "mutationStrength": 0.3,
-    "cooldown": 80
+    "cooldown": 80,
+    "crossoverRate": 0.7
   },
   "death": {
     "foodDropRatio": 0.25,

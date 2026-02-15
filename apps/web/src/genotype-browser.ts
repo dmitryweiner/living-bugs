@@ -1,5 +1,6 @@
 import type { DNA, CreatureState, WorldConfig } from '@living-bugs/sim-core';
 import { countSensorInputs, countActuatorOutputs, dnaCompatibilityDistance, DEFAULT_SPECIATION_CONFIG } from '@living-bugs/sim-core';
+import { renderBrainGraph } from './brain-graph.js';
 
 // ============================================================
 // Genotype Browser — browse and spawn genotypes
@@ -16,14 +17,21 @@ export interface GenotypeEntry {
   source: 'seed' | 'current' | 'hof';
 }
 
+export type BrowserTab = 'all' | 'seed' | 'current' | 'hof';
+
 export class GenotypeBrowser {
   private entries: GenotypeEntry[] = [];
   private container: HTMLElement;
   private listContainer: HTMLElement;
+  private tabBar: HTMLElement;
   private isOpen = false;
   private compareMode = false;
   private selectedA: number | null = null;
   private selectedB: number | null = null;
+  private brainCanvas: HTMLCanvasElement;
+  private brainGraphIdx: number | null = null;
+  private activeTab: BrowserTab = 'all';
+  private hofEntries: GenotypeEntry[] = [];
 
   /** Callback: user wants to spawn a creature with this DNA. */
   onSpawn: ((dna: DNA) => void) | null = null;
@@ -35,6 +43,15 @@ export class GenotypeBrowser {
 
     this.listContainer = document.createElement('div');
     this.listContainer.className = 'genotype-list';
+
+    this.tabBar = document.createElement('div');
+    this.tabBar.className = 'genotype-tabs';
+
+    this.brainCanvas = document.createElement('canvas');
+    this.brainCanvas.width = 400;
+    this.brainCanvas.height = 300;
+    this.brainCanvas.className = 'brain-graph-canvas';
+    this.brainCanvas.style.display = 'none';
 
     this.buildUI();
   }
@@ -82,7 +99,22 @@ export class GenotypeBrowser {
       });
     }
 
+    // Include Hall of Fame entries
+    this.entries.push(...this.hofEntries);
+
     if (this.isOpen) this.render();
+  }
+
+  /**
+   * Set Hall of Fame genotypes (from seed-genotypes.json or uploaded file).
+   */
+  setHallOfFame(genotypes: { dna: DNA; fitness?: number }[]): void {
+    this.hofEntries = genotypes.map((g, i) => ({
+      label: `HoF #${i + 1}`,
+      dna: g.dna,
+      fitness: g.fitness,
+      source: 'hof' as const,
+    }));
   }
 
   // ============================================================
@@ -108,14 +140,43 @@ export class GenotypeBrowser {
     header.appendChild(compareBtn);
 
     this.container.appendChild(header);
+    this.buildTabBar();
+    this.container.appendChild(this.tabBar);
+    this.container.appendChild(this.brainCanvas);
     this.container.appendChild(this.listContainer);
+  }
+
+  private buildTabBar(): void {
+    this.tabBar.innerHTML = '';
+    const tabs: { id: BrowserTab; label: string }[] = [
+      { id: 'all', label: 'All' },
+      { id: 'seed', label: 'Seed' },
+      { id: 'current', label: 'Current' },
+      { id: 'hof', label: 'Hall of Fame' },
+    ];
+    for (const tab of tabs) {
+      const btn = document.createElement('button');
+      btn.textContent = tab.label;
+      btn.className = `genotype-tab${this.activeTab === tab.id ? ' active' : ''}`;
+      btn.addEventListener('click', () => {
+        this.activeTab = tab.id;
+        this.buildTabBar();
+        this.render();
+      });
+      this.tabBar.appendChild(btn);
+    }
   }
 
   private render(): void {
     this.listContainer.innerHTML = '';
 
-    if (this.entries.length === 0) {
-      this.listContainer.innerHTML = '<div class="genotype-empty">No genotypes loaded. Import genotypes or wait for creatures to evolve.</div>';
+    // Filter entries by active tab
+    const filtered = this.activeTab === 'all'
+      ? this.entries
+      : this.entries.filter(e => e.source === this.activeTab);
+
+    if (filtered.length === 0) {
+      this.listContainer.innerHTML = '<div class="genotype-empty">No genotypes in this tab. Import genotypes or wait for creatures to evolve.</div>';
       return;
     }
 
@@ -125,11 +186,13 @@ export class GenotypeBrowser {
       return;
     }
 
-    for (let i = 0; i < this.entries.length; i++) {
-      const entry = this.entries[i];
+    for (let i = 0; i < filtered.length; i++) {
+      const entry = filtered[i];
+      // Find the actual index in this.entries for compare/brain graph
+      const globalIdx = this.entries.indexOf(entry);
       const row = document.createElement('div');
       row.className = 'genotype-row';
-      if (this.compareMode && (i === this.selectedA || i === this.selectedB)) {
+      if (this.compareMode && (globalIdx === this.selectedA || globalIdx === this.selectedB)) {
         row.classList.add('selected');
       }
 
@@ -152,15 +215,15 @@ export class GenotypeBrowser {
 
       if (this.compareMode) {
         const selectBtn = document.createElement('button');
-        selectBtn.textContent = this.selectedA === i ? 'A' : this.selectedB === i ? 'B' : 'Select';
+        selectBtn.textContent = this.selectedA === globalIdx ? 'A' : this.selectedB === globalIdx ? 'B' : 'Select';
         selectBtn.addEventListener('click', (e) => {
           e.stopPropagation();
           if (this.selectedA === null) {
-            this.selectedA = i;
-          } else if (this.selectedB === null && i !== this.selectedA) {
-            this.selectedB = i;
+            this.selectedA = globalIdx;
+          } else if (this.selectedB === null && globalIdx !== this.selectedA) {
+            this.selectedB = globalIdx;
           } else {
-            this.selectedA = i;
+            this.selectedA = globalIdx;
             this.selectedB = null;
           }
           this.render();
@@ -174,6 +237,22 @@ export class GenotypeBrowser {
           this.onSpawn?.(entry.dna);
         });
         btnContainer.appendChild(spawnBtn);
+
+        const brainBtn = document.createElement('button');
+        brainBtn.textContent = this.brainGraphIdx === globalIdx ? 'Hide' : 'Brain';
+        brainBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          if (this.brainGraphIdx === globalIdx) {
+            this.brainGraphIdx = null;
+            this.brainCanvas.style.display = 'none';
+          } else {
+            this.brainGraphIdx = globalIdx;
+            this.brainCanvas.style.display = 'block';
+            renderBrainGraph(this.brainCanvas, entry.dna.brain);
+          }
+          this.render();
+        });
+        btnContainer.appendChild(brainBtn);
       }
 
       row.appendChild(btnContainer);

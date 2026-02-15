@@ -148,6 +148,183 @@ export function createDefaultDNA(groupId: number, rng: PRNG): DNA {
 }
 
 // ============================================================
+// NEAT Crossover
+// ============================================================
+
+/**
+ * NEAT crossover of two brain genomes using innovation numbers for alignment.
+ * Matching genes are randomly inherited from either parent (bias toward fitter).
+ * Disjoint / excess genes come from the fitter parent only.
+ * If fitness is equal, disjoint/excess from both parents are included.
+ */
+export function crossoverBrain(
+  brain1: BrainGenome,
+  brain2: BrainGenome,
+  fitness1: number,
+  fitness2: number,
+  rng: PRNG,
+): BrainGenome {
+  // Determine which parent is fitter (or equal)
+  const fitterBrain = fitness1 >= fitness2 ? brain1 : brain2;
+  const otherBrain = fitness1 >= fitness2 ? brain2 : brain1;
+  const equalFitness = Math.abs(fitness1 - fitness2) < 1e-9;
+
+  // Index connection genes by innovation number
+  const connsA = new Map<number, ConnectionGene>();
+  for (const c of fitterBrain.connectionGenes) {
+    connsA.set(c.innovationNumber, c);
+  }
+  const connsB = new Map<number, ConnectionGene>();
+  for (const c of otherBrain.connectionGenes) {
+    connsB.set(c.innovationNumber, c);
+  }
+
+  // Collect all innovation numbers
+  const allInnovations = new Set([...connsA.keys(), ...connsB.keys()]);
+
+  const childConnections: ConnectionGene[] = [];
+  const usedNodeIds = new Set<number>();
+
+  for (const inn of allInnovations) {
+    const geneA = connsA.get(inn);
+    const geneB = connsB.get(inn);
+
+    let selected: ConnectionGene;
+
+    if (geneA && geneB) {
+      // Matching gene — randomly pick one, 60% bias toward fitter
+      selected = rng.chance(0.6) ? { ...geneA } : { ...geneB };
+      // If either parent has it disabled, 75% chance it stays disabled
+      if (!geneA.enabled || !geneB.enabled) {
+        selected.enabled = rng.chance(0.25);
+      }
+    } else if (geneA) {
+      // Disjoint/excess from fitter parent — always include
+      selected = { ...geneA };
+    } else if (geneB) {
+      // Disjoint/excess from other parent — only include if equal fitness
+      if (!equalFitness) continue;
+      selected = { ...geneB };
+    } else {
+      continue;
+    }
+
+    childConnections.push(selected);
+    usedNodeIds.add(selected.fromNode);
+    usedNodeIds.add(selected.toNode);
+  }
+
+  // Build node genes: union of nodes used by selected connections
+  // Start with fitter parent's nodes as the base
+  const nodeMap = new Map<number, NodeGene>();
+  for (const n of fitterBrain.nodeGenes) {
+    nodeMap.set(n.id, { ...n });
+  }
+  // Add any missing nodes from other parent that are referenced
+  for (const n of otherBrain.nodeGenes) {
+    if (usedNodeIds.has(n.id) && !nodeMap.has(n.id)) {
+      nodeMap.set(n.id, { ...n });
+    }
+  }
+
+  // Ensure all nodes referenced by connections exist
+  // (input/output nodes should always be present from fitter parent)
+  const childNodes = Array.from(nodeMap.values());
+
+  return {
+    plasticityRate: rng.chance(0.5) ? fitterBrain.plasticityRate : otherBrain.plasticityRate,
+    nodeGenes: childNodes,
+    connectionGenes: childConnections,
+  };
+}
+
+/**
+ * Crossover two DNA genomes producing a child.
+ * Body and structural traits are blended; brain uses NEAT crossover.
+ */
+export function crossoverDNA(
+  dna1: DNA,
+  dna2: DNA,
+  fitness1: number,
+  fitness2: number,
+  rng: PRNG,
+): DNA {
+  const fitter = fitness1 >= fitness2 ? dna1 : dna2;
+  const other = fitness1 >= fitness2 ? dna2 : dna1;
+
+  // Body: average radius
+  const childRadius = clamp((dna1.body.radius + dna2.body.radius) / 2, 3, 10);
+
+  // groupId from fitter parent
+  const groupId = fitter.groupId;
+
+  // hasIFF from fitter parent (with small chance from other)
+  const hasIFF = rng.chance(0.8) ? fitter.hasIFF : other.hasIFF;
+
+  // Sensors: union of both parents, deduplicated by type
+  // For duplicate types, randomly pick one version
+  const sensorMap = new Map<string, SensorGene>();
+  for (const s of fitter.sensors) {
+    const key = s.type + (s.type === 'rayVision' ? `-${Math.round(s.offsetAngle * 100)}` : '');
+    sensorMap.set(key, JSON.parse(JSON.stringify(s)));
+  }
+  for (const s of other.sensors) {
+    const key = s.type + (s.type === 'rayVision' ? `-${Math.round(s.offsetAngle * 100)}` : '');
+    if (!sensorMap.has(key)) {
+      // Include from other parent with 50% chance
+      if (rng.chance(0.5)) {
+        sensorMap.set(key, JSON.parse(JSON.stringify(s)));
+      }
+    } else {
+      // Randomly swap for the other parent's version
+      if (rng.chance(0.3)) {
+        sensorMap.set(key, JSON.parse(JSON.stringify(s)));
+      }
+    }
+  }
+  // Ensure energySense is always present
+  if (![...sensorMap.values()].some(s => s.type === 'energySense')) {
+    sensorMap.set('energySense', { type: 'energySense' });
+  }
+  const childSensors = Array.from(sensorMap.values());
+
+  // Actuators: union of both parents, deduplicated by type
+  const actuatorMap = new Map<string, ActuatorGene>();
+  for (const a of fitter.actuators) {
+    actuatorMap.set(a.type, JSON.parse(JSON.stringify(a)));
+  }
+  for (const a of other.actuators) {
+    if (!actuatorMap.has(a.type)) {
+      if (rng.chance(0.5)) {
+        actuatorMap.set(a.type, JSON.parse(JSON.stringify(a)));
+      }
+    }
+  }
+  // Ensure move is always present
+  if (!actuatorMap.has('move')) {
+    actuatorMap.set('move', { type: 'move' });
+  }
+  const childActuators = Array.from(actuatorMap.values());
+
+  // Brain: NEAT crossover
+  const childBrain = crossoverBrain(dna1.brain, dna2.brain, fitness1, fitness2, rng);
+
+  const child: DNA = {
+    groupId,
+    hasIFF,
+    body: { radius: childRadius },
+    sensors: childSensors,
+    actuators: childActuators,
+    brain: childBrain,
+  };
+
+  // Reconcile brain I/O to match new sensor/actuator set
+  reconcileBrainIO(child, rng);
+
+  return child;
+}
+
+// ============================================================
 // DNA Mutation
 // ============================================================
 

@@ -59,6 +59,7 @@ const CATEGORIES: ConfigCategory[] = [
       { label: 'Mutation Rate', path: 'reproduction.mutationRate', min: 0, max: 1, step: 0.01 },
       { label: 'Mutation Strength', path: 'reproduction.mutationStrength', min: 0, max: 2, step: 0.05 },
       { label: 'Cooldown', path: 'reproduction.cooldown', min: 0, max: 200, step: 5, isInteger: true },
+      { label: 'Crossover Rate', path: 'reproduction.crossoverRate', min: 0, max: 1, step: 0.05 },
     ],
   },
   {

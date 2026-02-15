@@ -1,6 +1,6 @@
 import { PRNG } from './prng.js';
-import { createDefaultDNA, countSensorInputs, countActuatorOutputs, mutateDNA, resetInnovationCounter, getInnovationCounter } from './dna.js';
-import { buildBrainRuntime, brainForwardPass, hebbianUpdate, type BrainRuntime } from './brain.js';
+import { createDefaultDNA, countSensorInputs, countActuatorOutputs, mutateDNA, crossoverDNA, resetInnovationCounter, getInnovationCounter } from './dna.js';
+import { buildBrainRuntime, brainForwardPass, hebbianUpdate, exportWeights, importWeights, type BrainRuntime } from './brain.js';
 import { wrapPosition, torusDistance, circlesOverlap, rayCircleIntersect } from './geometry.js';
 import { SpatialHash } from './spatial-hash.js';
 import { resolveConfigValue, type ExprContext } from './expr.js';
@@ -782,8 +782,63 @@ export class World {
     const cfg = this.config;
     const s = parent.state;
 
-    const childEnergy = s.energy * cfg.reproduction.offspringEnergyShare;
-    s.energy -= childEnergy;
+    // Try sexual reproduction (crossover) if configured
+    const crossoverRate = cfg.reproduction.crossoverRate ?? 0;
+    let mate: CreatureInternal | null = null;
+
+    if (crossoverRate > 0 && this.rng.chance(crossoverRate)) {
+      // Search for a compatible nearby mate (same group, also has enough energy)
+      const mateSearchRadius = cfg.creatureDefaults.radius * 20;
+      const nearbyCandidates = this.creatureHash.queryRadius(s.position, mateSearchRadius);
+      let bestDist = mateSearchRadius;
+
+      for (const candidateState of nearbyCandidates) {
+        if (candidateState.id === s.id) continue;
+        // Must be same group for compatibility
+        if (candidateState.dna.groupId !== s.dna.groupId) continue;
+        // Mate needs some energy (but not necessarily above reproduction threshold)
+        if (candidateState.energy < cfg.energy.initialEnergy * 0.3) continue;
+
+        const dist = torusDistance(s.position, candidateState.position, cfg.world.width, cfg.world.height);
+        if (dist < bestDist) {
+          bestDist = dist;
+          mate = this.creatures.get(candidateState.id) ?? null;
+        }
+      }
+    }
+
+    let childEnergy: number;
+    let childDNA: DNA;
+
+    if (mate) {
+      // Sexual reproduction: both parents contribute energy
+      const parentShare = s.energy * cfg.reproduction.offspringEnergyShare;
+      const mateShare = mate.state.energy * cfg.reproduction.offspringEnergyShare * 0.5;
+      s.energy -= parentShare;
+      mate.state.energy -= mateShare;
+      mate.state.reproductionCooldown = cfg.reproduction.cooldown;
+      childEnergy = parentShare + mateShare;
+
+      // Fitness approximation: age * (energy/maxEnergy)
+      const fitness1 = s.age * (s.energy / cfg.energy.maxEnergy);
+      const fitness2 = mate.state.age * (mate.state.energy / cfg.energy.maxEnergy);
+
+      // Crossover then mutate
+      childDNA = crossoverDNA(s.dna, mate.state.dna, fitness1, fitness2, this.rng);
+      childDNA = mutateDNA(childDNA, cfg.reproduction.mutationRate, cfg.reproduction.mutationStrength, this.rng);
+    } else {
+      // Asexual reproduction (original behavior)
+      childEnergy = s.energy * cfg.reproduction.offspringEnergyShare;
+      s.energy -= childEnergy;
+
+      childDNA = mutateDNA(
+        s.dna,
+        cfg.reproduction.mutationRate,
+        cfg.reproduction.mutationStrength,
+        this.rng
+      );
+    }
+
     s.reproductionCooldown = cfg.reproduction.cooldown;
 
     // Child position: near parent
@@ -794,14 +849,6 @@ export class World {
       y: s.position.y + Math.sin(offsetAngle) * offsetDist,
     };
     wrapPosition(childPos, this.config.world.width, this.config.world.height);
-
-    // Mutate DNA
-    const childDNA = mutateDNA(
-      s.dna,
-      cfg.reproduction.mutationRate,
-      cfg.reproduction.mutationStrength,
-      this.rng
-    );
 
     const childId = this.spawnCreature(childDNA, childPos, this.rng.range(0, Math.PI * 2), childEnergy);
     // Fix the event to record parent
@@ -857,7 +904,7 @@ export class World {
   getSnapshot(): WorldSnapshot {
     const creatures: CreatureState[] = [];
     for (const [, c] of this.creatures) {
-      creatures.push({ ...c.state });
+      creatures.push({ ...c.state, runtimeWeights: exportWeights(c.brainRuntime) });
     }
 
     const food: FoodItemState[] = [];
@@ -916,6 +963,10 @@ export class World {
         internal.state.age = c.age;
         internal.state.attackCooldown = c.attackCooldown;
         internal.state.reproductionCooldown = c.reproductionCooldown;
+        // Restore Hebbian-modified runtime weights
+        if (c.runtimeWeights) {
+          importWeights(internal.brainRuntime, c.runtimeWeights);
+        }
       }
     }
 
