@@ -323,10 +323,31 @@ export function runGenerational(
     }));
 
     if (creatureFitness.length === 0) {
-      // Everyone died — mutate from previous genotypes with higher mutation
-      currentGenotypes = currentGenotypes.map(dna =>
-        mutateDNA(dna, config.reproduction.mutationRate * 2, config.reproduction.mutationStrength * 2, rng)
-      );
+      // Everyone died — reseed from Hall of Fame if available, else mutate previous
+      const hofEntries = hallOfFame.getTopK(opts.exportTopK);
+      if (hofEntries.length > 0) {
+        const targetPop = config.simulation.initialCreatures;
+        const numGroups = 4;
+        currentGenotypes = [];
+        for (let i = 0; i < targetPop; i++) {
+          const hofDna = hofEntries[i % hofEntries.length].dna;
+          let childDNA = mutateDNA(
+            JSON.parse(JSON.stringify(hofDna)),
+            config.reproduction.mutationRate,
+            config.reproduction.mutationStrength,
+            rng,
+          );
+          childDNA.groupId = i % numGroups;
+          if (childDNA.groupId === 1 || childDNA.groupId === 3) {
+            childDNA.hasIFF = true;
+          }
+          currentGenotypes.push(childDNA);
+        }
+      } else {
+        currentGenotypes = currentGenotypes.map(dna =>
+          mutateDNA(dna, config.reproduction.mutationRate * 2, config.reproduction.mutationStrength * 2, rng)
+        );
+      }
       const stats: GenerationStats = {
         generation: gen + 1,
         speciesCount: 0,

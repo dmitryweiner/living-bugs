@@ -1,20 +1,20 @@
 {
   "world": {
-    "width": 2000,
-    "height": 2000,
+    "width": 4000,
+    "height": 4000,
     "boundary": "torus"
   },
   "simulation": {
     "tickRate": 30,
     "brainRate": 10,
-    "maxCreatures": 500,
-    "initialCreatures": 50,
+    "maxCreatures": 1000,
+    "initialCreatures": 100,
     "seed": 42
   },
   "energy": {
-    "initialEnergy": 120,
+    "initialEnergy": 150,
     "maxEnergy": 400,
-    "baseMetabolism": 0.08,
+    "baseMetabolism": 0.05,
     "densityMetabolismFactor": 15,
     "moveCost": {
       "op": "mul",
@@ -38,9 +38,9 @@
     "broadcastCost": 0.03
   },
   "food": {
-    "spawnRate": 8,
+    "spawnRate": 18,
     "nutritionValue": 25,
-    "maxCount": 500,
+    "maxCount": 1000,
     "radius": 4
   },
   "combat": {
@@ -55,7 +55,7 @@
     "attackCooldown": 5
   },
   "reproduction": {
-    "energyThreshold": 200,
+    "energyThreshold": 160,
     "offspringEnergyShare": 0.4,
     "mutationRate": 0.15,
     "mutationStrength": 0.3,
@@ -72,13 +72,13 @@
     "donateCost": 1.0
   },
   "broadcast": {
-    "broadcastRadius": 100,
+    "broadcastRadius": 200,
     "signalChannels": 4
   },
   "obstacles": {
-    "count": 35,
-    "minRadius": 15,
-    "maxRadius": 45
+    "count": 250,
+    "minRadius": 8,
+    "maxRadius": 30
   },
   "creatureDefaults": {
     "radius": 5,

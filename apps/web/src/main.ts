@@ -4,6 +4,7 @@ import { Renderer } from './renderer.js';
 import { saveSnapshot, loadSnapshot, clearSnapshot } from './storage.js';
 import { ConfigEditor } from './config-editor.js';
 import { Analytics } from './analytics.js';
+import { SpeciesChart } from './species-chart.js';
 import { Minimap } from './minimap.js';
 import { GenotypeBrowser } from './genotype-browser.js';
 
@@ -24,6 +25,7 @@ let world: World;
 let renderer: Renderer;
 let configEditor: ConfigEditor;
 let analytics: Analytics;
+let speciesChart: SpeciesChart;
 let minimap: Minimap;
 let genotypeBrowser: GenotypeBrowser;
 let isPaused = false;
@@ -237,6 +239,31 @@ function setupControls(): void {
     toolAnalytics.classList.toggle('active');
   });
 
+  // Analytics mode toggle (Common / Species)
+  const analyticsModeBtn = document.getElementById('analytics-mode-btn')!;
+  const analyticsCanvas = document.getElementById('analytics-canvas') as HTMLCanvasElement;
+  const speciesCanvas = document.getElementById('species-canvas') as HTMLCanvasElement;
+  const analyticsTitle = document.getElementById('analytics-title')!;
+  let analyticsMode: 'common' | 'species' = 'common';
+
+  analyticsModeBtn.addEventListener('click', () => {
+    analyticsMode = analyticsMode === 'common' ? 'species' : 'common';
+    const labels = analyticsModeBtn.querySelectorAll('span');
+    if (analyticsMode === 'common') {
+      analyticsCanvas.style.display = 'block';
+      speciesCanvas.style.display = 'none';
+      analyticsTitle.textContent = 'Population Analytics';
+      labels[0].className = 'active-label';
+      labels[1].className = 'inactive-label';
+    } else {
+      analyticsCanvas.style.display = 'none';
+      speciesCanvas.style.display = 'block';
+      analyticsTitle.textContent = 'Species Population';
+      labels[0].className = 'inactive-label';
+      labels[1].className = 'active-label';
+    }
+  });
+
   // Minimap toggle
   const toolMinimap = document.getElementById('tool-minimap')!;
   toolMinimap.addEventListener('click', () => {
@@ -341,7 +368,10 @@ function gameLoop(): void {
     if (speedMultiplier >= 1) {
       for (let i = 0; i < speedMultiplier; i++) {
         lastMetrics = world.step();
-        if (lastMetrics) analytics.record(lastMetrics);
+        if (lastMetrics) {
+          analytics.record(lastMetrics);
+          speciesChart.record(world.getCreatureStates(), lastMetrics.tick);
+        }
       }
     } else {
       // Fractional speed: accumulate and step when >= 1
@@ -349,7 +379,10 @@ function gameLoop(): void {
       if (slowAccumulator >= 1) {
         slowAccumulator -= 1;
         lastMetrics = world.step();
-        if (lastMetrics) analytics.record(lastMetrics);
+        if (lastMetrics) {
+          analytics.record(lastMetrics);
+          speciesChart.record(world.getCreatureStates(), lastMetrics.tick);
+        }
       }
     }
   }
@@ -362,6 +395,7 @@ function gameLoop(): void {
   frameCount++;
   if (frameCount % 10 === 0) {
     analytics.draw();
+    speciesChart.draw();
     const creatures = world.getCreatureStates();
     const food = world.getFoodStates();
     const obstacles = world.getObstacleStates();
@@ -509,6 +543,9 @@ async function init(): Promise<void> {
 
   // Create analytics
   analytics = new Analytics('analytics-canvas', 5);
+
+  // Create species chart
+  speciesChart = new SpeciesChart('species-canvas', 5);
 
   // Create minimap
   minimap = new Minimap('minimap-canvas', config);
