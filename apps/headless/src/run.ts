@@ -421,6 +421,15 @@ export function runGenerational(
         config.reproduction.mutationStrength,
         rng,
       );
+
+      // Force group diversity: rotate groupIds across the population
+      // so training maintains competing groups instead of converging to one
+      const numGroups = 4;
+      childDNA.groupId = i % numGroups;
+      if (childDNA.groupId === 1 || childDNA.groupId === 3) {
+        childDNA.hasIFF = true;
+      }
+
       nextGenGenotypes.push(childDNA);
     }
 

@@ -674,8 +674,10 @@ describe('World', () => {
       w.step();
       const states = w.getCreatureStates();
       const cost = 200 - states[0].energy;
-      // Should be exactly base metabolism (1.0) since factor is 0
-      expect(cost).toBeCloseTo(1.0, 1);
+      // Base metabolism (1.0) scaled by (radius/default)^2
+      // Group 0 archetype has radius=6, default=5, so scale = (6/5)^2 = 1.44
+      const radiusScale = Math.pow(states[0].dna.body.radius / cfg.creatureDefaults.radius, 2);
+      expect(cost).toBeCloseTo(1.0 * radiusScale, 1);
     });
   });
 });

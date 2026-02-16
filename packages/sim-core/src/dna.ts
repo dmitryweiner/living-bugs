@@ -123,24 +123,98 @@ export function createMinimalBrain(
 // Create default DNA for a new creature
 // ============================================================
 
+/**
+ * Create default DNA for a creature. Each group gets a distinct archetype
+ * so that different strategies (solo vs social, predator vs forager) are
+ * present from the very first tick.
+ *
+ * - Group 0: Solo hunter — attack + eat, good vision, no IFF
+ * - Group 1: Social cooperator — IFF, donate, broadcast, eat
+ * - Group 2: Solo forager — eat, wide vision, extra touch, no IFF
+ * - Group 3: Social predator — IFF, attack, broadcast, eat
+ * - Groups 4+: fallback to solo forager
+ */
 export function createDefaultDNA(groupId: number, rng: PRNG): DNA {
-  const sensors: SensorGene[] = [
-    { type: 'rayVision', rayCount: 3, fov: 1.5, maxDistance: 50, offsetAngle: 0 },
-    { type: 'touch' },
-    { type: 'energySense' },
-  ];
+  const archetype = groupId % 4;
 
-  const actuators: ActuatorGene[] = [
-    { type: 'move' },
-    { type: 'eat' },
-  ];
+  let sensors: SensorGene[];
+  let actuators: ActuatorGene[];
+  let hasIFF: boolean;
+  let radius: number;
+
+  switch (archetype) {
+    case 0: // Solo hunter
+      sensors = [
+        { type: 'rayVision', rayCount: 5, fov: 1.8, maxDistance: 60, offsetAngle: 0 },
+        { type: 'touch' },
+        { type: 'energySense' },
+      ];
+      actuators = [
+        { type: 'move' },
+        { type: 'eat' },
+        { type: 'attack' },
+      ];
+      hasIFF = false;
+      radius = 6;
+      break;
+
+    case 1: // Social cooperator
+      sensors = [
+        { type: 'rayVision', rayCount: 3, fov: 1.5, maxDistance: 50, offsetAngle: 0 },
+        { type: 'touch' },
+        { type: 'energySense' },
+        { type: 'broadcastReceiver', channels: [0, 1] },
+      ];
+      actuators = [
+        { type: 'move' },
+        { type: 'eat' },
+        { type: 'donate' },
+        { type: 'broadcast', channel: 0 },
+      ];
+      hasIFF = true;
+      radius = 5;
+      break;
+
+    case 2: // Solo forager
+      sensors = [
+        { type: 'rayVision', rayCount: 4, fov: 2.0, maxDistance: 70, offsetAngle: 0 },
+        { type: 'rayVision', rayCount: 2, fov: 1.0, maxDistance: 40, offsetAngle: Math.PI },
+        { type: 'touch' },
+        { type: 'energySense' },
+      ];
+      actuators = [
+        { type: 'move' },
+        { type: 'eat' },
+      ];
+      hasIFF = false;
+      radius = 4;
+      break;
+
+    case 3: // Social predator
+    default:
+      sensors = [
+        { type: 'rayVision', rayCount: 4, fov: 1.6, maxDistance: 55, offsetAngle: 0 },
+        { type: 'touch' },
+        { type: 'energySense' },
+        { type: 'broadcastReceiver', channels: [0] },
+      ];
+      actuators = [
+        { type: 'move' },
+        { type: 'eat' },
+        { type: 'attack' },
+        { type: 'broadcast', channel: 0 },
+      ];
+      hasIFF = true;
+      radius = 5;
+      break;
+  }
 
   const brain = createMinimalBrain(sensors, actuators, rng);
 
   return {
     groupId,
-    hasIFF: false,
-    body: { radius: 5 },
+    hasIFF,
+    body: { radius },
     sensors,
     actuators,
     brain,

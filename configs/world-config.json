@@ -18,14 +18,21 @@
     "densityMetabolismFactor": 15,
     "moveCost": {
       "op": "mul",
-      "a": 0.02,
-      "b": { "op": "pow", "base": { "op": "div", "a": { "op": "var", "name": "creature.radius" }, "b": 5 }, "exp": 2 }
+      "args": [
+        { "op": "lit", "value": 0.02 },
+        { "op": "pow", "args": [
+          { "op": "div", "args": [{ "op": "var", "name": "creature.radius" }, { "op": "lit", "value": 5 }] },
+          { "op": "lit", "value": 2 }
+        ]}
+      ]
     },
     "turnCost": 0.01,
     "attackCost": {
       "op": "mul",
-      "a": 2.0,
-      "b": { "op": "div", "a": { "op": "var", "name": "creature.radius" }, "b": 5 }
+      "args": [
+        { "op": "lit", "value": 2.0 },
+        { "op": "div", "args": [{ "op": "var", "name": "creature.radius" }, { "op": "lit", "value": 5 }] }
+      ]
     },
     "visionCostPerRay": 0.005,
     "broadcastCost": 0.03
@@ -39,8 +46,10 @@
   "combat": {
     "baseDamage": {
       "op": "mul",
-      "a": 15,
-      "b": { "op": "div", "a": { "op": "var", "name": "creature.radius" }, "b": 5 }
+      "args": [
+        { "op": "lit", "value": 15 },
+        { "op": "div", "args": [{ "op": "var", "name": "creature.radius" }, { "op": "lit", "value": 5 }] }
+      ]
     },
     "attackRadius": 10,
     "attackCooldown": 5

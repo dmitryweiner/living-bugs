@@ -150,17 +150,24 @@ export class World {
 
     for (let i = 0; i < initialCreatures; i++) {
       let dna: DNA;
+      const groupId = i % numGroups;
+
       if (seedGenotypes && seedGenotypes.length > 0) {
         // Pick a seed genotype (cycle through), apply light mutation
         const seed = seedGenotypes[i % seedGenotypes.length];
         dna = mutateDNA(
           seed,
-          this.config.reproduction.mutationRate * 0.5, // lighter mutation to preserve training
+          this.config.reproduction.mutationRate * 0.5,
           this.config.reproduction.mutationStrength * 0.5,
           this.rng,
         );
+        // Force group diversity: override groupId so we always have competing groups.
+        // Also set IFF for social groups (1, 3) so cooperation/competition mechanics work.
+        dna.groupId = groupId;
+        if (groupId === 1 || groupId === 3) {
+          dna.hasIFF = true;
+        }
       } else {
-        const groupId = i % numGroups;
         dna = createDefaultDNA(groupId, this.rng);
       }
       const pos = this.findClearPosition(this.config.creatureDefaults.radius);
